@@ -1,0 +1,5 @@
+bucket         = "bitfiction-terraform-state"
+key            = "terraform.tfstate"
+region         = "eu-central-1"
+dynamodb_table = "bitfiction-terraform-locks"
+role_arn       = "arn:aws:iam::729084315504:role/bitfiction-terraform-role"
