@@ -1,1 +1,176 @@
-# staticbot
+# Multi-Account Static Website Infrastructure
+
+This repository contains infrastructure as code for managing multiple static websites across different AWS accounts, with support for multiple deployment stages (dev, preview, www) per website.
+
+## Initiate directory structure
+
+mkdir -p scripts infrastructure/{environments/{example,another-example},modules/{static-website,backend},remote-state} websites/{example.com,example.org,another-example.com}/{dev,preview,www} tests/infrastructure
+
+## Features
+
+- Multi-account AWS infrastructure management
+- Multiple websites per AWS account support
+- Stage-based deployments (dev, preview, www)
+- Automatic SSL certificate management
+- CloudFront CDN integration
+- Custom error pages
+- Intelligent redirects:
+  - Language/region-based
+  - WWW/non-WWW handling
+  - Maintenance mode support
+- Infrastructure testing
+- Drift detection
+
+## Prerequisites
+
+- AWS CLI configured with appropriate credentials
+- OpenTofu/Terraform installed (version >=1.0.0)
+- Go installed (for running tests)
+- Bash shell (for running scripts)
+
+## Initial Setup
+
+1. Clone the repository:
+```bash
+git clone <your-repo-url>
+cd <repo-name>
+```
+
+2. Set up AWS accounts prerequisites:
+```bash
+# Make the script executable
+chmod +x scripts/setup-prerequisites.sh
+```
+
+or use terraform
+
+```bash
+cd infrastructure/remote-state
+tofu init
+tofu apply
+```
+
+# Run for each AWS account
+```bash
+./scripts/setup-prerequisites.sh <account-id>
+```
+
+3. Configure your websites in `infrastructure/environments/<env>/terraform.tfvars`:
+```hcl
+websites = {
+  "example.com" = {
+    domain_name = "example.com"
+    aws_account = "account1"
+    stages = [
+      {
+        name      = "dev"
+        subdomain = "dev"
+      },
+      {
+        name      = "preview"
+        subdomain = "preview"
+      },
+      {
+        name      = "production"
+        subdomain = "www"
+      }
+    ]
+  }
+}
+```
+
+## Deployment
+
+1. Initialize Terraform with remote state:
+```bash
+cd infrastructure
+tofu init \
+  -backend-config="bucket=your-state-bucket" \
+  -backend-config="key=env/terraform.tfstate" \
+  -backend-config="region=eu-central-1" \
+  -backend-config="dynamodb_table=terraform-locks"
+```
+
+2. Deploy websites:
+```bash
+# Deploy all stages of a specific website
+./scripts/deploy.sh website example.com
+
+# Deploy a specific stage
+./scripts/deploy.sh stage example.com dev
+
+# Deploy everything in an account
+./scripts/deploy.sh account account1
+```
+
+## Website Content Management
+
+Place your website content in the appropriate directories:
+```
+websites/
+├── example.com/
+│   ├── dev/
+│   ├── preview/
+│   └── www/
+└── another-example.com/
+    ├── dev/
+    ├── preview/
+    └── www/
+```
+
+## Testing
+
+1. Run infrastructure tests:
+```bash
+cd tests
+go test -v ./infrastructure/...
+```
+
+2. Run drift detection:
+```bash
+./scripts/drift-detection.sh
+```
+
+## Maintenance Mode
+
+To enable maintenance mode for a website:
+
+1. Update the website configuration:
+```hcl
+module "static_website" {
+  # ... other configuration ...
+  maintenance_mode = true
+  maintenance_allowed_ips = ["203.0.113.1"]
+}
+```
+
+2. Apply the changes:
+```bash
+tofu apply -target=module.static_website["example.com-*"]
+```
+
+## Security Considerations
+
+- All S3 buckets are private and accessed only through CloudFront
+- SSL/TLS certificates are automatically managed
+- Public access is blocked by default
+- IP whitelisting available for maintenance mode
+- Infrastructure changes are tracked in remote state with locking
+
+## Common Issues
+
+1. **Certificate Validation**: ACM certificates must be in us-east-1 for CloudFront usage
+2. **DNS Propagation**: Allow up to 48 hours for initial DNS propagation
+3. **CloudFront Updates**: Distribution updates can take 15-30 minutes
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+MIT License - see LICENSE file for details
