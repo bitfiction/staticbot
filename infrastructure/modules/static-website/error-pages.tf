@@ -58,7 +58,7 @@ resource "aws_s3_object" "error_404" {
         <p>The page you're looking for doesn't exist or has been moved.</p>
         <a href="/" class="back-link">Return Home</a>
         <div class="stage-info">
-            Environment: ${var.environment}<br>
+            Business: ${var.business}<br>
             Stage: ${var.stage_subdomain}.${var.domain_name}
         </div>
     </div>
@@ -124,7 +124,7 @@ resource "aws_s3_object" "error_500" {
         <p>Something went wrong. Please try again later.</p>
         <a href="/" class="back-link">Return Home</a>
         <div class="stage-info">
-            Environment: ${var.environment}<br>
+            Business: ${var.business}<br>
             Stage: ${var.stage_subdomain}.${var.domain_name}
         </div>
     </div>
@@ -181,7 +181,7 @@ resource "aws_s3_object" "maintenance" {
         <p>We're currently performing scheduled maintenance.</p>
         <p>Please check back shortly.</p>
         <div class="stage-info">
-            Environment: ${var.environment}<br>
+            Business: ${var.business}<br>
             Stage: ${var.stage_subdomain}.${var.domain_name}
         </div>
     </div>

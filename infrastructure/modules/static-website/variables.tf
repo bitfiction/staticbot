@@ -1,27 +1,44 @@
-# Variables
+# infrastructure/modules/static-website/variables.tf
+
+variable "business" {
+  type        = string
+  description = "Business name (e.g., bitfiction, guidedleap, ...)"
+}
+
 variable "domain_name" {
+  description = "Primary domain name for the website"
   type        = string
-  description = "Primary domain name"
 }
 
-variable "subdomains" {
-  type        = list(string)
-  description = "List of subdomains"
+variable "stage_subdomain" {
+  description = "Subdomain for this stage"
+  type        = string
 }
 
-variable "index_page" {
+variable "content_path" {
+  description = "Path to the website content"
   type        = string
-  description = "Index document filename"
 }
 
-variable "error_page" {
-  type        = string
-  description = "Error document filename"
-}
-
-variable "environment" {
-  type        = string
-  description = "Environment name (e.g., production, staging, development)"
+variable "error_response_codes" {
+  description = "Custom error response configuration"
+  type = map(object({
+    response_code         = number
+    response_page_path   = string
+    error_caching_min_ttl = number
+  }))
+  default = {
+    "404" = {
+      response_code         = 404
+      response_page_path   = "/404.html"
+      error_caching_min_ttl = 300
+    }
+    "500" = {
+      response_code         = 500
+      response_page_path   = "/500.html"
+      error_caching_min_ttl = 300
+    }
+  }
 }
 
 # Variables for maintenance mode control

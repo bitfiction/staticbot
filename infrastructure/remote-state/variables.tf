@@ -1,5 +1,5 @@
+# infrastructure/remote-state/variables.tf
 
-# Variables
 variable "aws_region" {
   type    = string
   default = "eu-central-1"

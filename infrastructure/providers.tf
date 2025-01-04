@@ -9,77 +9,37 @@ terraform {
   }
   
   backend "s3" {
-    # Will be configured via backend-config files
+    # Will be configured via -backend-config options during init
   }
 }
 
-# Create provider configurations for each AWS account
-locals {
-  # Get unique list of accounts being used
-  used_accounts = distinct([
-    for website in var.websites : website.aws_account
-  ])
-}
-
-# Default provider configuration
+# Default provider configuration for the businesses's region
 provider "aws" {
-  region = var.aws_region
+  region = var.aws_account.region
   
   assume_role {
     role_arn = var.aws_account.role_arn
   }
 
   default_tags {
-    tags = var.common_tags
+    tags = merge(var.common_tags, {
+      Business = var.business
+    })
   }
 }
 
-# Generate provider configurations for each account
+# Provider for ACM certificates (must be in us-east-1 for CloudFront)
 provider "aws" {
-  alias  = "account1"
-  region = var.aws_accounts["account1"].region
-  assume_role {
-    role_arn = var.aws_accounts["account1"].role_arn
-  }
-}
-
-provider "aws" {
-  alias  = "account2"
-  region = var.aws_accounts["account2"].region
-  assume_role {
-    role_arn = var.aws_accounts["account2"].role_arn
-  }
-}
-
-provider "aws" {
-  alias  = "account3"
-  region = var.aws_accounts["account3"].region
-  assume_role {
-    role_arn = var.aws_accounts["account3"].role_arn
-  }
-}
-
-# Certificate providers (required in us-east-1 for CloudFront)
-provider "aws" {
-  alias  = "account1_certificates"
+  alias  = "certificates"
   region = "us-east-1"
+  
   assume_role {
-    role_arn = var.aws_accounts["account1"].role_arn
+    role_arn = var.aws_account.role_arn
   }
-}
 
-provider "aws" {
-  alias  = "account2_certificates"
-  region = "us-east-1"
-  assume_role {
-    role_arn = var.aws_accounts["account2"].role_arn
-  }
-}
-
-provider "aws" {
-  alias  = "account3_certificates"
-  region = "us-east-1"
-  assume_role {
-    role_arn = var.aws_accounts["account3"].role_arn
+  default_tags {
+    tags = merge(var.common_tags, {
+      Business = var.business
+    })
   }
 }

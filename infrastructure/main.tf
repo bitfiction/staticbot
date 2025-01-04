@@ -1,18 +1,5 @@
 # infrastructure/main.tf
 
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-  
-  backend "s3" {
-    # Will be configured via -backend-config options
-  }
-}
-
 module "static_website" {
   source = "./modules/static-website"
   
@@ -27,7 +14,7 @@ module "static_website" {
 
   domain_name     = each.value.domain_name
   stage_subdomain = each.value.subdomain
-  environment     = var.environment
+  business        = var.business
   content_path    = each.value.content_path
 
   maintenance_mode = try(each.value.maintenance_mode, false)

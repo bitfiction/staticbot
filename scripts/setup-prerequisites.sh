@@ -32,9 +32,9 @@ check_prerequisites() {
 }
 
 create_state_bucket() {
-    local environment=$1
+    local business=$1
     local account_id=$2
-    local bucket_name="${environment}-${BASE_STATE_BUCKET_NAME}"
+    local bucket_name="${business}-${BASE_STATE_BUCKET_NAME}"
     
     if aws s3api head-bucket --bucket "$bucket_name" 2>/dev/null; then
         log_warn "State bucket ${bucket_name} already exists"
@@ -79,8 +79,8 @@ create_state_bucket() {
 }
 
 create_dynamodb_table() {
-    local environment=$1
-    local table_name="${environment}-${DYNAMODB_TABLE}"
+    local business=$1
+    local table_name="${business}-${DYNAMODB_TABLE}"
     
     if aws dynamodb describe-table --table-name "$table_name" 2>/dev/null; then
         log_warn "DynamoDB table ${table_name} already exists"
@@ -100,9 +100,9 @@ create_dynamodb_table() {
 }
 
 create_terraform_role() {
-    local environment=$1
+    local business=$1
     local account_id=$2
-    local role_name="${environment}-${TERRAFORM_ROLE_NAME}"
+    local role_name="${business}-${TERRAFORM_ROLE_NAME}"
     
     if aws iam get-role --role-name "$role_name" 2>/dev/null; then
         log_warn "IAM role ${role_name} already exists"
@@ -130,7 +130,7 @@ create_terraform_role() {
     # Create policy
     aws iam put-role-policy \
         --role-name "$role_name" \
-        --policy-name "${environment}TerraformPolicy" \
+        --policy-name "${business}TerraformPolicy" \
         --policy-document '{
             "Version": "2012-10-17",
             "Statement": [
@@ -151,24 +151,24 @@ create_terraform_role() {
 }
 
 main() {
-    local environment=$1
+    local business=$1
     local account_id=$2
 
-    log_info "Setting up prerequisites for ${environment} environment (Account: ${account_id})"
+    log_info "Setting up prerequisites for ${business} business (Account: ${account_id})"
     
     check_prerequisites
-    # create_state_bucket "$environment" "$account_id"
-    # create_dynamodb_table "$environment"
-    create_terraform_role "$environment" "$account_id"
+    # create_state_bucket "$business" "$account_id"
+    # create_dynamodb_table "$business"
+    create_terraform_role "$business" "$account_id"
 
     log_info "Prerequisites setup complete!"
-    # log_info "State bucket: ${environment}-${BASE_STATE_BUCKET_NAME}"
-    # log_info "DynamoDB table: ${environment}-${DYNAMODB_TABLE}"
-    log_info "IAM role: ${environment}-${TERRAFORM_ROLE_NAME}"
+    # log_info "State bucket: ${business}-${BASE_STATE_BUCKET_NAME}"
+    # log_info "DynamoDB table: ${business}-${DYNAMODB_TABLE}"
+    log_info "IAM role: ${business}-${TERRAFORM_ROLE_NAME}"
 }
 
 if [ $# -ne 2 ]; then
-    echo "Usage: $0 <environment> <aws-account-id>"
+    echo "Usage: $0 <business> <aws-account-id>"
     echo "Example: $0 prod 111111111111"
     exit 1
 fi

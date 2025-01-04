@@ -1,4 +1,4 @@
-# infrastructure/environments/accounts.tf
+# infrastructure/businesses/accounts.tf
 
 # Website configurations with account mappings
 variable "websites" {
@@ -11,15 +11,4 @@ variable "websites" {
       subdomain = string
     }))
   }))
-}
-
-# Add a local to help track which websites are in each account
-locals {
-  websites_by_account = {
-    for account_key in keys(var.aws_accounts) : account_key => {
-      for website_key, website in var.websites :
-      website_key => website
-      if website.aws_account == account_key
-    }
-  }
 }

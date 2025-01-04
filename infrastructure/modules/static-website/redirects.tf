@@ -1,4 +1,4 @@
-# modules/static-website/redirects.tf
+# infrastructure/modules/static-website/redirects.tf
 
 # CloudFront function for language/region redirects
 resource "aws_cloudfront_function" "language_redirect" {
@@ -152,26 +152,6 @@ function handler(event) {
     return request;
 }
 EOF
-}
-
-# Add functions to CloudFront distribution
-resource "aws_cloudfront_distribution" "website" {
-  # ... existing configuration ...
-
-  function_association {
-    event_type   = "viewer-request"
-    function_arn = aws_cloudfront_function.language_redirect.arn
-  }
-
-  function_association {
-    event_type   = "viewer-request"
-    function_arn = aws_cloudfront_function.www_redirect.arn
-  }
-
-  function_association {
-    event_type   = "viewer-request"
-    function_arn = aws_cloudfront_function.maintenance_mode.arn
-  }
 }
 
 # Create maintenance page

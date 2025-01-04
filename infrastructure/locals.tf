@@ -1,3 +1,4 @@
+# infrastructure/locals.tf
 
 locals {
   # Flatten website and stage combinations

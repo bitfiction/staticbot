@@ -1,4 +1,5 @@
 # modules/backend/main.tf
+
 # Placeholder for future backend services
 # Example structure for API Gateway + Lambda + RDS
 

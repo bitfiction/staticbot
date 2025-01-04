@@ -4,7 +4,7 @@ This repository contains infrastructure as code for managing multiple static web
 
 ## Initiate directory structure
 
-mkdir -p scripts infrastructure/{environments/{example,another-example},modules/{static-website,backend},remote-state} websites/{example.com,example.org,another-example.com}/{dev,preview,www} tests/infrastructure
+mkdir -p scripts infrastructure/{businesses/{example,another-example},modules/{static-website,backend},remote-state} websites/{example.com,example.org,another-example.com}/{dev,preview,www} tests/infrastructure
 
 ## Features
 
@@ -42,20 +42,62 @@ cd <repo-name>
 chmod +x scripts/setup-prerequisites.sh
 ```
 
-or use terraform
+# Run for each AWS account
+
+1. Create IAM user <business>_assume with IAMFullAccess policy attached via AWS Console
+- save users credentials (AWS access and secret key)
+
+2. Setup AWS config profile for user that we will use to assume terraform role
+Run:
+```bash
+aws configure --profile <business>-iam
+
+```
+and use AWS credentials of user created in previous step
+
+3. Run for the AWS account to setup IAM role
+```bash
+./scripts/setup-prerequisites.sh <business> <account-id>
+
+```
+
+4. Allow <business>-iam IAM user to assume <business>-terraform-role by adding trust relationship 
+```json
+  {
+      "Sid": "<business>IamAssume",
+      "Effect": "Allow",
+      "Principal": {
+          "AWS": "arn:aws:iam::111111111111:user/<business>_assume"
+      },
+      "Action": "sts:AssumeRole"
+  }
+
+```
+
+5. Add following profile to ~/.aws/config
+```bash
+[profile <business>-terraform-role]
+role_arn = arn:aws:iam::111111111111:role/<business>-terraform-role
+source_profile = <business>-iam
+
+```
+
+6. Navigate to remote-state directory
+```bash
+cd infrastructure/remote-state
+
+```
+
+7. Initialize and apply for your business/environment
 
 ```bash
 cd infrastructure/remote-state
 tofu init
-tofu apply
+tofu apply -var="business=<business>" -var="terraform_role_arn=arn:aws:iam::111111111111:role/prod-terraform-role"
+
 ```
 
-# Run for each AWS account
-```bash
-./scripts/setup-prerequisites.sh <account-id>
-```
-
-3. Configure your websites in `infrastructure/environments/<env>/terraform.tfvars`:
+8. Configure your websites in `infrastructure/businesses/<env>/terraform.tfvars`:
 ```hcl
 websites = {
   "example.com" = {
@@ -77,18 +119,23 @@ websites = {
     ]
   }
 }
+
 ```
 
 ## Deployment
 
-1. Initialize Terraform with remote state:
+1. Create the backend.hcl file
+
+
+2. Initialize Terraform with remote state:
 ```bash
-cd infrastructure
-tofu init \
-  -backend-config="bucket=your-state-bucket" \
-  -backend-config="key=env/terraform.tfstate" \
-  -backend-config="region=eu-central-1" \
-  -backend-config="dynamodb_table=terraform-locks"
+cd infrastructure/businesses/<business>
+
+```
+
+# Initialize with backend config
+tofu init -backend-config=backend.hcl
+
 ```
 
 2. Deploy websites:
@@ -101,6 +148,7 @@ tofu init \
 
 # Deploy everything in an account
 ./scripts/deploy.sh account account1
+
 ```
 
 ## Website Content Management
@@ -116,6 +164,7 @@ websites/
     ├── dev/
     ├── preview/
     └── www/
+
 ```
 
 ## Testing
@@ -124,11 +173,13 @@ websites/
 ```bash
 cd tests
 go test -v ./infrastructure/...
+
 ```
 
 2. Run drift detection:
 ```bash
 ./scripts/drift-detection.sh
+
 ```
 
 ## Maintenance Mode
@@ -142,11 +193,13 @@ module "static_website" {
   maintenance_mode = true
   maintenance_allowed_ips = ["203.0.113.1"]
 }
+
 ```
 
 2. Apply the changes:
 ```bash
 tofu apply -target=module.static_website["example.com-*"]
+
 ```
 
 ## Security Considerations
