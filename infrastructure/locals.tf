@@ -10,7 +10,7 @@ locals {
         stage_name   = stage.name
         subdomain    = stage.subdomain
         full_domain  = "${stage.subdomain}.${website.domain_name}"
-        content_path = "${path.root}/../websites/${website.domain_name}/${stage.name}"
+        content_path = "${path.module}/../websites/${website.domain_name}/${stage.subdomain}"
       }
     ]
   ])
