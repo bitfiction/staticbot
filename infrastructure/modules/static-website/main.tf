@@ -153,7 +153,7 @@ resource "aws_s3_bucket_policy" "website" {
 
 # Route53 record for the stage
 resource "aws_route53_record" "website" {
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = var.zone_id
   name    = "${var.stage_subdomain}.${var.domain_name}"
   type    = "A"
 
