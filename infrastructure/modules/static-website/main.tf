@@ -132,6 +132,15 @@ resource "aws_cloudfront_distribution" "website" {
 
 
 
+# Upload index.html from content directory
+resource "aws_s3_object" "index" {
+  bucket = aws_s3_bucket.website.id
+  key    = "index.html"
+  source = "${var.content_path}/index.html"
+  content_type = "text/html"
+  etag = filemd5("${var.content_path}/index.html")
+}
+
 # S3 bucket policy
 resource "aws_s3_bucket_policy" "website" {
   bucket = aws_s3_bucket.website.id

@@ -28,6 +28,11 @@ variable "stage_subdomain" {
 variable "content_path" {
   description = "Path to the website content"
   type        = string
+  
+  validation {
+    condition     = fileexists("${var.content_path}/index.html")
+    error_message = "The content_path must contain an index.html file."
+  }
 }
 
 variable "error_response_codes" {
