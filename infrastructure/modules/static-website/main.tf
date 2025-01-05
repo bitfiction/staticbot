@@ -93,11 +93,6 @@ resource "aws_cloudfront_origin_access_identity" "oai" {
   comment = "OAI for ${var.domain_name} ${var.stage_subdomain}"
 }
 
-# Add this local value at the top of the file
-locals {
-  s3_origin_id = "S3-${var.stage_subdomain}.${var.domain_name}"
-}
-
 # CloudFront distribution
 resource "aws_cloudfront_distribution" "website" {
   enabled             = true
@@ -136,11 +131,6 @@ resource "aws_cloudfront_distribution" "website" {
     max_ttl     = 86400
 
     # Function associations
-    function_association {
-      event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.language_redirect.arn
-    }
-
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.www_redirect.arn
