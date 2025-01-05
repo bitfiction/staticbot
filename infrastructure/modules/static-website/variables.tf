@@ -10,6 +10,16 @@ variable "domain_name" {
   type        = string
 }
 
+variable "zone_id" {
+  description = "Route53 zone ID for the domain"
+  type        = string
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for the domain"
+  type        = string
+}
+
 variable "stage_subdomain" {
   description = "Subdomain for this stage"
   type        = string
