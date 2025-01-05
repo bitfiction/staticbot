@@ -97,7 +97,7 @@ tofu apply -var="business=<business>" -var="terraform_role_arn=arn:aws:iam::1111
 
 ```
 
-8. Configure your websites in `infrastructure/businesses/<env>/terraform.tfvars`:
+8. Configure your websites in `infrastructure/businesses/<business>/terraform.tfvars`:
 ```hcl
 websites = {
   "example.com" = {
@@ -107,14 +107,23 @@ websites = {
       {
         name      = "dev"
         subdomain = "dev"
+        www_redirect = false
+        maintenance_mode = false
+        maintenance_allowed_ips = []
       },
       {
         name      = "preview"
         subdomain = "preview"
+        www_redirect = false
+        maintenance_mode = false
+        maintenance_allowed_ips = []
       },
       {
         name      = "production"
         subdomain = "www"
+        www_redirect = true
+        maintenance_mode = false
+        maintenance_allowed_ips = []
       }
     ]
   }
@@ -132,6 +141,15 @@ websites = {
 cd infrastructure/businesses/<business>
 
 ```
+
+3. Validate certificates
+- go to AWS Cert Manager console and get the CNAME validation records
+- go to your domain registrar (if other than AWS Route53) and set CNAME records as specified in AWS Cert Manager
+
+4. Update Name servers
+- update nameservers in your domain registrars Admin interface
+- use the Route53 nameservers specified in the domains NS record in Route53
+
 
 # Initialize with backend config
 tofu init -backend-config=backend.hcl
@@ -186,13 +204,11 @@ go test -v ./infrastructure/...
 
 To enable maintenance mode for a website:
 
-1. Update the website configuration:
+1. Update the website configuration in terraform.tfvars
 ```hcl
-module "static_website" {
   # ... other configuration ...
   maintenance_mode = true
-  maintenance_allowed_ips = ["203.0.113.1"]
-}
+  maintenance_allowed_ips = ["128.0.40.1"]
 
 ```
 
@@ -201,14 +217,6 @@ module "static_website" {
 tofu apply -target=module.static_website["example.com-*"]
 
 ```
-
-3. Validate certificates
-- go to AWS Cert Manager console and get the CNAME validation records
-- go to your domain registrar (if other than AWS Route53) and set CNAME records as specified in AWS Cert Manager
-
-4. Update Name servers
-- update nameservers in your domain registrars Admin interface
-- use the Route53 nameservers specified in the domains NS record in Route53
 
 
 ## Security Considerations
