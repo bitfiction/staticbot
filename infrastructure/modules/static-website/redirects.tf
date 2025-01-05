@@ -2,7 +2,7 @@
 
 # CloudFront function for language/region redirects
 resource "aws_cloudfront_function" "language_redirect" {
-  name    = "${var.domain_name}-language-redirect"
+  name    = "${var.stage_subdomain}_${local.domain_name_underscore}-language-redirect"
   runtime = "cloudfront-js-1.0"
   comment = "Redirects users based on their location/language"
   
@@ -60,7 +60,7 @@ EOF
 
 # CloudFront function for www/non-www redirects
 resource "aws_cloudfront_function" "www_redirect" {
-  name    = "${var.domain_name}-www-redirect"
+  name    = "${var.stage_subdomain}_${local.domain_name_underscore}-www-redirect"
   runtime = "cloudfront-js-1.0"
   comment = "Redirects between www and non-www versions"
   
@@ -70,6 +70,11 @@ function handler(event) {
     var host = request.headers.host.value;
     var domain = '${var.domain_name}';
     
+    if (host.startsWith('dev.')) {
+        // Don't redirect dev environments
+        return request;
+    }
+
     // Configure preferred domain format (www or non-www)
     var useWWW = true;  // Set to false to prefer non-www
     
@@ -108,7 +113,7 @@ EOF
 
 # CloudFront function for maintenance mode
 resource "aws_cloudfront_function" "maintenance_mode" {
-  name    = "${var.domain_name}-maintenance-mode"
+  name    = "${var.stage_subdomain}_${local.domain_name_underscore}-maintenance-mode"
   runtime = "cloudfront-js-1.0"
   comment = "Handles maintenance mode redirects"
   

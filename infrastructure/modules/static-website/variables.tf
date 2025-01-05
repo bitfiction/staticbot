@@ -56,6 +56,13 @@ variable "error_response_codes" {
   }
 }
 
+# Variables for www redirect control
+variable "www_redirect" {
+  description = "Enable/disable www redirect"
+  type        = bool
+  default     = false
+}
+
 # Variables for maintenance mode control
 variable "maintenance_mode" {
   description = "Enable/disable maintenance mode"

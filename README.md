@@ -202,6 +202,15 @@ tofu apply -target=module.static_website["example.com-*"]
 
 ```
 
+3. Validate certificates
+- go to AWS Cert Manager console and get the CNAME validation records
+- go to your domain registrar (if other than AWS Route53) and set CNAME records as specified in AWS Cert Manager
+
+4. Update Name servers
+- update nameservers in your domain registrars Admin interface
+- use the Route53 nameservers specified in the domains NS record in Route53
+
+
 ## Security Considerations
 
 - All S3 buckets are private and accessed only through CloudFront

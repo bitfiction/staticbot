@@ -13,10 +13,16 @@ websites = {
       {
         name      = "dev"
         subdomain = "dev"
+        www_redirect = false
+        maintenance_mode = false
+        maintenance_allowed_ips = []
       },
       {
-        name      = "production"
-        subdomain = "www"
+        name         = "production"
+        subdomain    = "www"
+        www_redirect = true
+        maintenance_mode = false
+        maintenance_allowed_ips = []
       }
     ]
   },
@@ -26,10 +32,16 @@ websites = {
       {
         name      = "dev"
         subdomain = "dev"
+        www_redirect = false
+        maintenance_mode = false
+        maintenance_allowed_ips = []
       },
       {
-        name      = "production"
-        subdomain = "www"
+        name         = "production"
+        subdomain    = "www"
+        www_redirect = true
+        maintenance_mode = false
+        maintenance_allowed_ips = []        
       }
     ]
   }

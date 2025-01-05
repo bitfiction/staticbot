@@ -25,8 +25,11 @@ variable "websites" {
   type = map(object({
     domain_name = string
     stages = list(object({
-      name      = string
-      subdomain = string
+      name         = string
+      subdomain    = string
+      www_redirect = bool
+      maintenance_mode = bool
+      maintenance_allowed_ips = list(string)
     }))
   }))
 }

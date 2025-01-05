@@ -38,21 +38,7 @@ module "static_website" {
   zone_id         = module.domains[each.value.website_key].zone_id
   certificate_arn = module.domains[each.value.website_key].certificate_arn
 
+  www_redirect = try(each.value.www_redirect, false)
   maintenance_mode = try(each.value.maintenance_mode, false)
   maintenance_allowed_ips = try(each.value.maintenance_allowed_ips, [])
-}
-
-# Outputs
-output "website_urls" {
-  description = "CloudFront URLs for each website stage"
-  value = {
-    for k, v in module.static_website : k => v.cloudfront_url
-  }
-}
-
-output "nameservers" {
-  description = "Nameservers for each domain"
-  value = {
-    for k, v in module.static_website : k => v.nameservers
-  }
 }

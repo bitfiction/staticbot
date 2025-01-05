@@ -13,7 +13,3 @@ module "websites" {
 output "website_urls" {
   value = module.websites.website_urls
 }
-
-output "nameservers" {
-  value = module.websites.nameservers
-}

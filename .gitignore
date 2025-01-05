@@ -61,3 +61,4 @@ dist/
 # Test coverage
 coverage.txt
 coverage.html
+.aider*
