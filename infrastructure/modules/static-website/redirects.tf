@@ -5,7 +5,7 @@ resource "aws_cloudfront_function" "language_redirect" {
   name    = "${var.stage_subdomain}_${local.domain_name_underscore}-language-redirect"
   runtime = "cloudfront-js-1.0"
   comment = "Redirects users based on their location/language"
-  
+
   code = <<-EOF
 function handler(event) {
     var request = event.request;
@@ -63,7 +63,7 @@ resource "aws_cloudfront_function" "www_redirect" {
   name    = "${var.stage_subdomain}_${local.domain_name_underscore}-www-redirect"
   runtime = "cloudfront-js-1.0"
   comment = "Redirects between www and non-www versions"
-  
+
   code = <<-EOF
 function handler(event) {
     var request = event.request;
@@ -116,7 +116,7 @@ resource "aws_cloudfront_function" "maintenance_mode" {
   name    = "${var.stage_subdomain}_${local.domain_name_underscore}-maintenance-mode"
   runtime = "cloudfront-js-1.0"
   comment = "Handles maintenance mode redirects"
-  
+
   code = <<-EOF
 function handler(event) {
     var request = event.request;
@@ -161,9 +161,9 @@ EOF
 
 # Create maintenance page
 resource "aws_s3_object" "maintenance_page" {
-  bucket = aws_s3_bucket.website.id
-  key    = "maintenance.html"
-  content = <<EOF
+  bucket       = aws_s3_bucket.website.id
+  key          = "maintenance.html"
+  content      = <<EOF
 <!DOCTYPE html>
 <html lang="en">
 <head>

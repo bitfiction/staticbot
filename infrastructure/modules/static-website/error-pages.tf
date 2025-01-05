@@ -2,10 +2,10 @@
 
 # Error pages configuration for S3
 resource "aws_s3_object" "error_404" {
-  bucket = aws_s3_bucket.website.id
-  key    = "404.html"
+  bucket       = aws_s3_bucket.website.id
+  key          = "404.html"
   content_type = "text/html"
-  
+
   content = <<EOF
 <!DOCTYPE html>
 <html lang="en">
@@ -68,10 +68,10 @@ EOF
 }
 
 resource "aws_s3_object" "error_500" {
-  bucket = aws_s3_bucket.website.id
-  key    = "500.html"
+  bucket       = aws_s3_bucket.website.id
+  key          = "500.html"
   content_type = "text/html"
-  
+
   content = <<EOF
 <!DOCTYPE html>
 <html lang="en">
@@ -134,10 +134,10 @@ EOF
 }
 
 resource "aws_s3_object" "maintenance" {
-  bucket = aws_s3_bucket.website.id
-  key    = "maintenance.html"
+  bucket       = aws_s3_bucket.website.id
+  key          = "maintenance.html"
   content_type = "text/html"
-  
+
   content = <<EOF
 <!DOCTYPE html>
 <html lang="en">

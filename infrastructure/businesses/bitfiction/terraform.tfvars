@@ -11,17 +11,17 @@ websites = {
     domain_name = "bitfiction.com"
     stages = [
       {
-        name      = "dev"
-        subdomain = "dev"
-        www_redirect = false
-        maintenance_mode = false
+        name                    = "dev"
+        subdomain               = "dev"
+        www_redirect            = false
+        maintenance_mode        = false
         maintenance_allowed_ips = []
       },
       {
-        name         = "production"
-        subdomain    = "www"
-        www_redirect = true
-        maintenance_mode = false
+        name                    = "production"
+        subdomain               = "www"
+        www_redirect            = true
+        maintenance_mode        = false
         maintenance_allowed_ips = []
       }
     ]
@@ -30,25 +30,25 @@ websites = {
     domain_name = "bitfiction.org"
     stages = [
       {
-        name      = "dev"
-        subdomain = "dev"
-        www_redirect = false
-        maintenance_mode = false
+        name                    = "dev"
+        subdomain               = "dev"
+        www_redirect            = false
+        maintenance_mode        = false
         maintenance_allowed_ips = []
       },
       {
-        name         = "production"
-        subdomain    = "www"
-        www_redirect = true
-        maintenance_mode = false
-        maintenance_allowed_ips = []        
+        name                    = "production"
+        subdomain               = "www"
+        www_redirect            = true
+        maintenance_mode        = false
+        maintenance_allowed_ips = []
       }
     ]
   }
 }
 
 common_tags = {
-  Business    = "bitfiction"
-  ManagedBy   = "Terraform"
-  Owner       = "DevOps"
+  Business  = "bitfiction"
+  ManagedBy = "Terraform"
+  Owner     = "DevOps"
 }

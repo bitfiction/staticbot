@@ -1,8 +1,8 @@
 # infrastructure/environments/prod/main.tf
 
 module "websites" {
-  source = "../../"  # This points to the root infrastructure directory
-  
+  source = "../../" # This points to the root infrastructure directory
+
   business    = var.business
   aws_account = var.aws_account
   websites    = var.websites

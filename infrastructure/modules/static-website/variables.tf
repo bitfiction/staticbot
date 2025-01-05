@@ -28,7 +28,7 @@ variable "stage_subdomain" {
 variable "content_path" {
   description = "Path to the website content"
   type        = string
-  
+
   validation {
     condition     = fileexists("${var.content_path}/index.html")
     error_message = "The content_path must contain an index.html file."
@@ -39,18 +39,18 @@ variable "error_response_codes" {
   description = "Custom error response configuration"
   type = map(object({
     response_code         = number
-    response_page_path   = string
+    response_page_path    = string
     error_caching_min_ttl = number
   }))
   default = {
     "404" = {
       response_code         = 404
-      response_page_path   = "/404.html"
+      response_page_path    = "/404.html"
       error_caching_min_ttl = 300
     }
     "500" = {
       response_code         = 500
-      response_page_path   = "/500.html"
+      response_page_path    = "/500.html"
       error_caching_min_ttl = 300
     }
   }

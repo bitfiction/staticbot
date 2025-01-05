@@ -7,7 +7,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-  
+
   backend "s3" {
     # Will be configured via -backend-config options during init
   }
@@ -16,7 +16,7 @@ terraform {
 # Default provider configuration for the businesses's region
 provider "aws" {
   region = var.aws_account.region
-  
+
   assume_role {
     role_arn = var.aws_account.role_arn
   }
@@ -32,7 +32,7 @@ provider "aws" {
 provider "aws" {
   alias  = "certificates"
   region = "us-east-1"
-  
+
   assume_role {
     role_arn = var.aws_account.role_arn
   }

@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source                = "hashicorp/aws"
-      version              = "~> 5.0"
+      version               = "~> 5.0"
       configuration_aliases = [aws.certificates]
     }
   }
@@ -126,22 +126,20 @@ resource "aws_cloudfront_distribution" "website" {
   }
 
   tags = {
-    Business    = var.business
-    Domain      = var.domain_name
-    Stage       = var.stage_subdomain
+    Business = var.business
+    Domain   = var.domain_name
+    Stage    = var.stage_subdomain
   }
 }
 
 
-
-
 # Upload index.html from content directory
 resource "aws_s3_object" "index" {
-  bucket = aws_s3_bucket.website.id
-  key    = "index.html"
-  source = "${var.content_path}/index.html"
+  bucket       = aws_s3_bucket.website.id
+  key          = "index.html"
+  source       = "${var.content_path}/index.html"
   content_type = "text/html"
-  etag = filemd5("${var.content_path}/index.html")
+  etag         = filemd5("${var.content_path}/index.html")
 }
 
 # S3 bucket policy
@@ -151,8 +149,8 @@ resource "aws_s3_bucket_policy" "website" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "CloudFrontAccess"
-        Effect    = "Allow"
+        Sid    = "CloudFrontAccess"
+        Effect = "Allow"
         Principal = {
           AWS = aws_cloudfront_origin_access_identity.oai.iam_arn
         }
