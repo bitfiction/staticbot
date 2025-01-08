@@ -10,6 +10,21 @@ terraform {
   }
 }
 
+# Route53 record for apex domain
+resource "aws_route53_record" "apex" {
+  count = var.stage_subdomain == "www" ? 1 : 0
+  
+  zone_id = var.zone_id
+  name    = var.domain_name
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.website.domain_name
+    zone_id                = aws_cloudfront_distribution.website.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
 # S3 bucket for website content
 resource "aws_s3_bucket" "website" {
   bucket = "${var.business}-${var.domain_name}-${var.stage_subdomain}"
@@ -53,7 +68,7 @@ resource "aws_cloudfront_distribution" "website" {
   is_ipv6_enabled     = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
-  aliases             = ["${var.stage_subdomain}.${var.domain_name}"]
+  aliases             = var.stage_subdomain == "www" ? [var.domain_name, "${var.stage_subdomain}.${var.domain_name}"] : ["${var.stage_subdomain}.${var.domain_name}"]
 
   origin {
     domain_name = aws_s3_bucket.website.bucket_regional_domain_name
