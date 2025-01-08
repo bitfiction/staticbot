@@ -78,7 +78,8 @@ function handler(event) {
     // Configure preferred domain format (www or non-www)
     var useWWW = true;  // Set to false to prefer non-www
     
-    if (useWWW && !host.startsWith('www.')) {
+     // Handle both direct domain and www cases
+     if (useWWW && (host === domain || !host.startsWith('www.'))) {
         return {
             statusCode: 301,
             statusDescription: 'Moved Permanently',
