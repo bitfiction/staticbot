@@ -4,7 +4,7 @@ This repository contains infrastructure as code for managing multiple static web
 
 ## Initiate directory structure
 
-mkdir -p scripts infrastructure/{businesses/{example,another-example},modules/{static-website,backend},remote-state} websites/{example.com,example.org,another-example.com}/{dev,preview,www} tests/infrastructure
+mkdir -p scripts infrastructure/{accounts/{example,another-example},modules/{static-website,backend},remote-state} websites/{example.com,example.org,another-example.com}/{dev,preview,www} tests/infrastructure
 
 ## Features
 
@@ -44,30 +44,47 @@ chmod +x scripts/setup-prerequisites.sh
 
 # Run for each AWS account
 
-1. Create IAM user <business>_assume with IAMFullAccess policy attached via AWS Console
+1. Create IAM user <account_name>_assume with IAMFullAccess policy attached via AWS Console
 - save users credentials (AWS access and secret key)
 
 2. Setup AWS config profile for user that we will use to assume terraform role
 Run:
 ```bash
-aws configure --profile <business>-iam
+aws configure --profile <account_name>-iam
 
 ```
 and use AWS credentials of user created in previous step
 
 3. Run for the AWS account to setup IAM role
 ```bash
-./scripts/setup-prerequisites.sh <business> <account-id>
+./scripts/setup-prerequisites.sh <account_name> <account-id>
 
 ```
 
-4. Allow <business>-iam IAM user to assume <business>-terraform-role by adding trust relationship 
+4. Allow <account_name>-iam IAM user to assume <account_name>-terraform-role by adding trust relationship 
+
+On the caller side (IAM user in this case):
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "PermissionToAssumeStaticbotDev",
+			"Effect": "Allow",
+			"Action": "sts:AssumeRole",
+			"Resource": "arn:aws:iam::682033486080:role/staticbot-dev-terraform-role"
+		}
+	]
+}
+```
+
+On the role to be assumed in the destination account (IAM role in this case):
 ```json
   {
-      "Sid": "<business>IamAssume",
+      "Sid": "<account_name>IamAssume",
       "Effect": "Allow",
       "Principal": {
-          "AWS": "arn:aws:iam::111111111111:user/<business>_assume"
+          "AWS": "arn:aws:iam::111111111111:user/<account_name>_assume"
       },
       "Action": "sts:AssumeRole"
   }
@@ -76,28 +93,27 @@ and use AWS credentials of user created in previous step
 
 5. Add following profile to ~/.aws/config
 ```bash
-[profile <business>-terraform-role]
-role_arn = arn:aws:iam::111111111111:role/<business>-terraform-role
-source_profile = <business>-iam
+[profile <account_name>-terraform-role]
+role_arn = arn:aws:iam::111111111111:role/<account_name>-terraform-role
+source_profile = <account_name>-iam
 
 ```
 
 6. Navigate to remote-state directory
 ```bash
-cd infrastructure/remote-state
+cd infrastructure/accounts/<account_name>/remote-state
 
 ```
 
-7. Initialize and apply for your business/environment
+7. Initialize and apply for your account
 
 ```bash
-cd infrastructure/remote-state
 tofu init
-tofu apply -var="business=<business>" -var="terraform_role_arn=arn:aws:iam::111111111111:role/prod-terraform-role"
+tofu apply
 
 ```
 
-8. Configure your websites in `infrastructure/businesses/<business>/terraform.tfvars`:
+8. Configure your websites in `infrastructure/accounts/<account_name>/terraform.tfvars`:
 ```hcl
 websites = {
   "example.com" = {
@@ -138,7 +154,7 @@ websites = {
 
 2. Initialize Terraform with remote state:
 ```bash
-cd infrastructure/businesses/<business>
+cd infrastructure/accounts/<account_name>
 
 ```
 

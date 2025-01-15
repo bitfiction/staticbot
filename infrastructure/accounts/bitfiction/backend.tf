@@ -1,4 +1,4 @@
-# infrastructure/businesses/bitfiction/backend.tf
+# infrastructure/accounts/bitfiction/backend.tf
 
 terraform {
   backend "s3" {

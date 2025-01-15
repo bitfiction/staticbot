@@ -13,7 +13,7 @@ terraform {
 # Route53 record for apex domain
 resource "aws_route53_record" "apex" {
   count = var.stage_subdomain == "www" ? 1 : 0
-  
+
   zone_id = var.zone_id
   name    = var.domain_name
   type    = "A"
@@ -27,7 +27,7 @@ resource "aws_route53_record" "apex" {
 
 # S3 bucket for website content
 resource "aws_s3_bucket" "website" {
-  bucket = "${var.business}-${var.domain_name}-${var.stage_subdomain}"
+  bucket = "${var.account_name}-${var.domain_name}-${var.stage_subdomain}"
 }
 
 resource "aws_s3_bucket_public_access_block" "website" {
@@ -141,9 +141,9 @@ resource "aws_cloudfront_distribution" "website" {
   }
 
   tags = {
-    Business = var.business
-    Domain   = var.domain_name
-    Stage    = var.stage_subdomain
+    Account = var.account_name
+    Domain  = var.domain_name
+    Stage   = var.stage_subdomain
   }
 }
 

@@ -1,6 +1,6 @@
-variable "business" {
+variable "account_name" {
   type        = string
-  description = "Business name"
+  description = "Account name"
 }
 
 variable "domain_name" {

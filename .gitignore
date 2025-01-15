@@ -14,8 +14,8 @@ override.tf.json
 terraform.rc
 .terraform.lock.hcl
 
-# Exclude tfvars files in businesses directory
-!infrastructure/businesses/**/*.tfvars
+# Exclude tfvars files in accounts directory
+# !infrastructure/accounts/**/*.tfvars
 
 # Go tests
 *.test

@@ -31,78 +31,10 @@ check_prerequisites() {
     fi
 }
 
-create_state_bucket() {
-    local business=$1
-    local account_id=$2
-    local bucket_name="${business}-${BASE_STATE_BUCKET_NAME}"
-    
-    if aws s3api head-bucket --bucket "$bucket_name" 2>/dev/null; then
-        log_warn "State bucket ${bucket_name} already exists"
-        return
-    fi
-    
-    log_info "Creating state bucket: ${bucket_name}"
-    
-    # Create bucket
-    aws s3api create-bucket \
-        --bucket "$bucket_name" \
-        --region "$AWS_REGION" \
-        --create-bucket-configuration LocationConstraint="$AWS_REGION"
-
-    # Enable versioning
-    aws s3api put-bucket-versioning \
-        --bucket "$bucket_name" \
-        --versioning-configuration Status=Enabled
-
-    # Enable encryption
-    aws s3api put-bucket-encryption \
-        --bucket "$bucket_name" \
-        --server-side-encryption-configuration '{
-            "Rules": [
-                {
-                    "ApplyServerSideEncryptionByDefault": {
-                        "SSEAlgorithm": "AES256"
-                    }
-                }
-            ]
-        }'
-
-    # Block public access
-    aws s3api put-public-access-block \
-        --bucket "$bucket_name" \
-        --public-access-block-configuration '{
-            "BlockPublicAcls": true,
-            "IgnorePublicAcls": true,
-            "BlockPublicPolicy": true,
-            "RestrictPublicBuckets": true
-        }'
-}
-
-create_dynamodb_table() {
-    local business=$1
-    local table_name="${business}-${DYNAMODB_TABLE}"
-    
-    if aws dynamodb describe-table --table-name "$table_name" 2>/dev/null; then
-        log_warn "DynamoDB table ${table_name} already exists"
-        return
-    fi
-    
-    log_info "Creating DynamoDB table: ${table_name}"
-    
-    aws dynamodb create-table \
-        --table-name "$table_name" \
-        --attribute-definitions AttributeName=LockID,AttributeType=S \
-        --key-schema AttributeName=LockID,KeyType=HASH \
-        --billing-mode PAY_PER_REQUEST \
-        --region "$AWS_REGION"
-        
-    aws dynamodb wait table-exists --table-name "$table_name"
-}
-
 create_terraform_role() {
-    local business=$1
+    local account_name=$1
     local account_id=$2
-    local role_name="${business}-${TERRAFORM_ROLE_NAME}"
+    local role_name="${account_name}-${TERRAFORM_ROLE_NAME}"
     
     if aws iam get-role --role-name "$role_name" 2>/dev/null; then
         log_warn "IAM role ${role_name} already exists"
@@ -130,7 +62,7 @@ create_terraform_role() {
     # Create policy
     aws iam put-role-policy \
         --role-name "$role_name" \
-        --policy-name "${business}TerraformPolicy" \
+        --policy-name "${account_name}TerraformPolicy" \
         --policy-document '{
             "Version": "2012-10-17",
             "Statement": [
@@ -151,24 +83,20 @@ create_terraform_role() {
 }
 
 main() {
-    local business=$1
+    local account_name=$1
     local account_id=$2
 
-    log_info "Setting up prerequisites for ${business} business (Account: ${account_id})"
+    log_info "Setting up prerequisites for ${account_name} account_name (Account: ${account_id})"
     
     check_prerequisites
-    # create_state_bucket "$business" "$account_id"
-    # create_dynamodb_table "$business"
-    create_terraform_role "$business" "$account_id"
+    create_terraform_role "$account_name" "$account_id"
 
     log_info "Prerequisites setup complete!"
-    # log_info "State bucket: ${business}-${BASE_STATE_BUCKET_NAME}"
-    # log_info "DynamoDB table: ${business}-${DYNAMODB_TABLE}"
-    log_info "IAM role: ${business}-${TERRAFORM_ROLE_NAME}"
+    log_info "IAM role: ${account_name}-${TERRAFORM_ROLE_NAME}"
 }
 
 if [ $# -ne 2 ]; then
-    echo "Usage: $0 <business> <aws-account-id>"
+    echo "Usage: $0 <account_name> <aws-account-id>"
     echo "Example: $0 prod 111111111111"
     exit 1
 fi

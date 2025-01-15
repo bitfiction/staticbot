@@ -13,7 +13,7 @@ terraform {
   }
 }
 
-# Default provider configuration for the businesses's region
+# Default provider configuration for the accounts's region
 provider "aws" {
   region = var.aws_account.region
 
@@ -23,7 +23,7 @@ provider "aws" {
 
   default_tags {
     tags = merge(var.common_tags, {
-      Business = var.business
+      Account = var.account_name
     })
   }
 }
@@ -39,7 +39,7 @@ provider "aws" {
 
   default_tags {
     tags = merge(var.common_tags, {
-      Business = var.business
+      Account = var.account_name
     })
   }
 }

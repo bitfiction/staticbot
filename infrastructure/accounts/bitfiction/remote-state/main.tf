@@ -11,7 +11,7 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-  
+
   assume_role {
     role_arn = var.terraform_role_arn
   }
@@ -19,7 +19,7 @@ provider "aws" {
 
 # Backend S3 bucket
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "${var.business}-terraform-state"
+  bucket = "${var.account_name}-terraform-state"
 
   lifecycle {
     prevent_destroy = true
@@ -54,7 +54,7 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
 
 # DynamoDB for state locking
 resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "${var.business}-terraform-locks"
+  name         = "${var.account_name}-terraform-locks"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 

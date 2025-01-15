@@ -1,8 +1,8 @@
 # infrastructure/modules/static-website/variables.tf
 
-variable "business" {
+variable "account_name" {
   type        = string
-  description = "Business name (e.g., bitfiction, guidedleap, ...)"
+  description = "Account name (e.g., bitfiction, guidedleap, ...)"
 }
 
 variable "domain_name" {

@@ -5,7 +5,7 @@ variable "aws_region" {
   default = "eu-central-1"
 }
 
-variable "business" {
+variable "account_name" {
   type = string
 }
 

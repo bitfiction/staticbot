@@ -13,7 +13,7 @@ resource "aws_route53_zone" "main" {
   name = var.domain_name
 
   tags = {
-    Business = var.business
+    Account = var.account_name
   }
 }
 

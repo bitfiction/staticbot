@@ -1,7 +1,7 @@
 # infrastructure/variables.tf
 
-variable "business" {
-  description = "Business name (bitfiction, guidedleap, agentdev)"
+variable "account_name" {
+  description = "Account name (bitfiction, guidedleap, agentdev)"
   type        = string
 }
 
@@ -15,7 +15,7 @@ variable "aws_account" {
 }
 
 variable "websites" {
-  description = "Configuration for websites in this businesses"
+  description = "Configuration for websites in this accounts"
   type = map(object({
     domain_name = string
     stages = list(object({

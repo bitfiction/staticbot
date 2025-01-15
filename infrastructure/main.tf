@@ -12,7 +12,7 @@ module "domains" {
     aws.certificates = aws.certificates
   }
 
-  business    = var.business
+  account_name    = var.account_name
   domain_name = each.value.domain_name
 }
 
@@ -31,7 +31,7 @@ module "static_website" {
 
   domain_name     = each.value.domain_name
   stage_subdomain = each.value.subdomain
-  business        = var.business
+  account_name        = var.account_name
   content_path    = each.value.content_path
   
   # Pass existing domain resources
