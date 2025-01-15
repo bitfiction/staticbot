@@ -1,0 +1,5 @@
+bucket         = "staticbot-dev-terraform-state"
+key            = "infra.tfstate"
+region         = "eu-central-1"
+dynamodb_table = "staticbot-dev-terraform-locks"
+role_arn       = "arn:aws:iam::682033486080:role/staticbot-dev-terraform-role"
