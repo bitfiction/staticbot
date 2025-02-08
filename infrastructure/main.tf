@@ -3,7 +3,7 @@
 # Create domain resources once per domain
 module "domains" {
   source = "./modules/domain"
-  
+
   for_each = {
     for website_key, website in var.websites : website_key => website
   }
@@ -12,16 +12,16 @@ module "domains" {
     aws.certificates = aws.certificates
   }
 
-  account_name    = var.account_name
-  domain_name = each.value.domain_name
+  account_name = var.account_name
+  domain_name  = each.value.domain_name
 }
 
 # Create static websites for each stage
 module "static_website" {
   source = "./modules/static-website"
-  
+
   for_each = {
-    for deployment in local.website_stages : 
+    for deployment in local.website_stages :
     "${deployment.website_key}-${deployment.stage_name}" => deployment
   }
 
@@ -31,14 +31,14 @@ module "static_website" {
 
   domain_name     = each.value.domain_name
   stage_subdomain = each.value.subdomain
-  account_name        = var.account_name
+  account_name    = var.account_name
   content_path    = each.value.content_path
-  
+
   # Pass existing domain resources
   zone_id         = module.domains[each.value.website_key].zone_id
   certificate_arn = module.domains[each.value.website_key].certificate_arn
 
-  www_redirect = try(each.value.www_redirect, false)
-  maintenance_mode = try(each.value.maintenance_mode, false)
+  www_redirect            = try(each.value.www_redirect, false)
+  maintenance_mode        = try(each.value.maintenance_mode, false)
   maintenance_allowed_ips = try(each.value.maintenance_allowed_ips, [])
 }
