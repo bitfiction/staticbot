@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to create IAM role with S3 access and cross-account trust relationship'
+
+Parameters:
+  TrustedAccountId:
+    Type: String
+    Default: '682033486080'
+    Description: AWS Account ID that will be trusted to assume this role
+
+Resources:
+  CrossAccountRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: staticbot-crossaccount-operator
+      Description: Role for StaticBot cross-account access
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: 
+                - !Sub 'arn:aws:iam::${TrustedAccountId}:role/staticbot-dev-cross-account-operator-0'
+                - !Sub 'arn:aws:iam::${TrustedAccountId}:role/staticbot-dev-cross-account-operator-1'
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+      Policies:
+        - PolicyName: S3CustomAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:DeleteObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - 'arn:aws:s3:::*'
+                  - 'arn:aws:s3:::*/*'
+
+Outputs:
+  RoleARN:
+    Description: ARN of the created IAM role
+    Value: !GetAtt CrossAccountRole.Arn
