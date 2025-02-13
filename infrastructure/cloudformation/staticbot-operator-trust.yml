@@ -21,6 +21,8 @@ Resources:
               AWS: 
                 - !Sub 'arn:aws:iam::${TrustedAccountId}:role/staticbot-dev-cross-account-operator-0'
                 - !Sub 'arn:aws:iam::${TrustedAccountId}:role/staticbot-dev-cross-account-operator-1'
+                - !Sub 'arn:aws:iam::${TrustedAccountId}:assumed-role/staticbot-dev-cross-account-operator-0/StaticbotSession'
+                - !Sub 'arn:aws:iam::${TrustedAccountId}:assumed-role/staticbot-dev-cross-account-operator-1/StaticbotSession'
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
