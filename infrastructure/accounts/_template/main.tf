@@ -1,5 +1,5 @@
 module "websites" {
-  source = "../../cloud_aws/" # This points to the root infrastructure directory
+  source = "../../cloud_aws/"
 
   account_name = var.account_name
   aws_account  = var.aws_account

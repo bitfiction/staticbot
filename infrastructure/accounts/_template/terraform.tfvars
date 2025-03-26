@@ -1,30 +1,28 @@
-account_name = "staticbot-dev"
+account_name = "<account_name>"
 
 aws_account = {
-  account_id = "682033486080"
-  //  for deployment via IAM role
-  role_arn = "arn:aws:iam::682033486080:role/staticbot-dev-terraform-role"
-  region   = "eu-central-1"
+  account_id = "<target_account_id>"
+  role_arn = "<target_role_arn>"
+  region   = "<target_region>"
 }
 
 websites = {
-  "staticbot.eu" = {
-    domain_name = "staticbot.eu"
+  "<websites_domain>" = {
+    domain_name = "<websites_domain_name>"
     stages = [
       {
-        name                    = "dev"
-        subdomain               = "dev"
-        www_redirect            = false
-        maintenance_mode        = false
-        maintenance_allowed_ips = []
+        name                    = "<websites_stage_name>"
+        subdomain               = "<websites_stage_subdomain>"
+        www_redirect            = <websites_stage_www_redirect>
+        maintenance_mode        = <websites_stage_maintenance_mode>
+        maintenance_allowed_ips = ["<websites_stage_maintenance_allowed_ips>"]
       }
     ]
   }
 }
 
 common_tags = {
-  Account   = "bitfiction"
+  Account   = "<account_name>"
   DeployedBy = "Staticbot"
   ManagedBy  = "Terraform"
-  Owner      = "DevOps"
 }
