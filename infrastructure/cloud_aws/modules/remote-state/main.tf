@@ -12,6 +12,7 @@ provider "aws" {
 
   assume_role {
     role_arn = var.terraform_role_arn
+    external_id = var.external_id
   }
 }
 

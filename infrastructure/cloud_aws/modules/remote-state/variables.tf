@@ -12,3 +12,7 @@ variable "account_name" {
 variable "terraform_role_arn" {
   type = string
 }
+
+variable "external_id" {
+  type = string
+}
