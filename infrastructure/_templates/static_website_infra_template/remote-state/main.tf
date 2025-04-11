@@ -3,4 +3,5 @@ module "remote_state" {
 
   account_name = var.account_name
   terraform_role_arn = var.terraform_role_arn
+  external_id = var.external_id
 }
