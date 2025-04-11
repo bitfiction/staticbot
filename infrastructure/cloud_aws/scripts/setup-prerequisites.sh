@@ -4,9 +4,9 @@
 set -euo pipefail
 
 # Configuration (can be moved to a config file)
-BASE_STATE_BUCKET_NAME="terraform-state"
-DYNAMODB_TABLE="terraform-state-locks"
-TERRAFORM_ROLE_NAME="terraform-role"
+BASE_STATE_BUCKET_NAME="tf-state"
+DYNAMODB_TABLE="tf-state-locks"
+TERRAFORM_ROLE_NAME="tf-role"
 AWS_REGION="eu-central-1"
 
 # Colors for output

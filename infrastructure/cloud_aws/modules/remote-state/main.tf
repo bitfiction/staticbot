@@ -18,7 +18,7 @@ provider "aws" {
 
 # Backend S3 bucket
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "${var.account_name}-terraform-state"
+  bucket = "${var.account_name}-tf-state"
 
   lifecycle {
     prevent_destroy = true
