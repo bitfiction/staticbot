@@ -16,3 +16,14 @@ variable "terraform_role_arn" {
 variable "external_id" {
   type = string
 }
+
+variable "dynamo_table_name_suffix" {
+  type    = string
+  default = "tf-locks"
+}
+
+variable "s3_bucket_name_suffix" {
+  type    = string
+  default = "tf-state"
+}
+

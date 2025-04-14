@@ -2,7 +2,7 @@
 
 # Create domain resources once per domain
 module "domains" {
-  source = "./modules/domain"
+  source = "../../modules/domain"
 
   for_each = {
     for website_key, website in var.websites : website_key => website
@@ -18,7 +18,7 @@ module "domains" {
 
 # Create static websites for each stage
 module "static_website" {
-  source = "./modules/static-website"
+  source = "../../modules/static-website"
 
   for_each = {
     for deployment in local.website_stages :

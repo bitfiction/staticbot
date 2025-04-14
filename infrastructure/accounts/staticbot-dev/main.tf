@@ -1,5 +1,5 @@
 module "websites" {
-  source = "../../cloud_aws/"
+  source = "../../cloud_aws/root_modules/static_website_custom_domain"
 
   account_name = var.account_name
   aws_account  = var.aws_account

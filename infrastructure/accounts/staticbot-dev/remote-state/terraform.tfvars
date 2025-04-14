@@ -9,3 +9,5 @@ aws_account = {
 
 terraform_role_arn = "arn:aws:iam::682033486080:role/staticbot-dev-terraform-role"
 
+
+

@@ -18,7 +18,7 @@ provider "aws" {
 
 # Backend S3 bucket
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "${var.account_name}-tf-state"
+  bucket = "${var.account_name}-${var.s3_bucket_name_suffix}"
 
   lifecycle {
     prevent_destroy = true
@@ -53,7 +53,7 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
 
 # DynamoDB for state locking
 resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "${var.account_name}-tf-locks"
+  name         = "${var.account_name}-${var.dynamo_table_name_suffix}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
