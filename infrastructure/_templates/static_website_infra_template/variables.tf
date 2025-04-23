@@ -19,6 +19,7 @@ variable "websites" {
     stages = list(object({
       name                    = string
       subdomain               = string
+      content_path            = string
       www_redirect            = bool
       maintenance_mode        = bool
       maintenance_allowed_ips = list(string)

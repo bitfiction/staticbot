@@ -28,6 +28,7 @@ variable "websites" {
       name                    = string
       subdomain               = string
       www_redirect            = bool
+      content_path            = string
       maintenance_mode        = bool
       maintenance_allowed_ips = list(string)
     }))
