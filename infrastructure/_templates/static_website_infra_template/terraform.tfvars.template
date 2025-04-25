@@ -7,14 +7,14 @@ aws_account = {
 }
 
 websites = {
-  "<websites_domain_1_name>" = {
-    domain_name = "<websites_domain_1_name>"
+  "<website_domain_1_name>" = {
+    domain_name = "<website_domain_1_name>"
     stages = [
       {
-        name                    = "<websites_domain_1_stage_1_name>"
-        subdomain               = "<websites_domain_1_stage_1_subdomain>"
-        content_path            = "<websites_domain_1_stage_1_content_path>"
-        www_redirect            = <websites_domain_1_stage_1_www_redirect>
+        name                    = "<website_domain_1_stage_1_name>"
+        subdomain               = "<website_domain_1_stage_1_subdomain>"
+        content_path            = "<website_domain_1_stage_1_content_path>"
+        www_redirect            = <website_domain_1_stage_1_www_redirect>
         maintenance_mode        = false
         maintenance_allowed_ips = []
       }
@@ -23,7 +23,7 @@ websites = {
 }
 
 common_tags = {
-  Domain     = "<websites_domain_1_name>"
+  Domain     = "<website_domain_1_name>"
   DeployedBy = "Staticbot"
   ManagedBy  = "Terraform"
 }
