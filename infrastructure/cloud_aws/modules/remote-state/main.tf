@@ -1,21 +1,3 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-
-  assume_role {
-    role_arn = var.terraform_role_arn
-    external_id = var.external_id
-  }
-}
-
 # Backend S3 bucket
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "${var.account_name}-${var.s3_bucket_name_suffix}"
