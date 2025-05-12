@@ -4,6 +4,7 @@ aws_account = {
   account_id = "<target_account_id>"
   role_arn = "<target_role_arn>"
   region   = "<target_region>"
+  external_id = "<external_id>"
 }
 
 websites = {

@@ -19,6 +19,7 @@ provider "aws" {
 
   assume_role {
     role_arn = var.aws_account.role_arn
+    external_id = var.aws_account.external_id
   }
 
   default_tags {
@@ -35,6 +36,7 @@ provider "aws" {
 
   assume_role {
     role_arn = var.aws_account.role_arn
+    external_id = var.aws_account.external_id
   }
 
   default_tags {
