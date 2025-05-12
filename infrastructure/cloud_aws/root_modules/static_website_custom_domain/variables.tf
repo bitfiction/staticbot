@@ -17,6 +17,7 @@ variable "aws_account" {
     account_id = string
     role_arn   = string
     region     = string
+    external_id = string
   })
 }
 
