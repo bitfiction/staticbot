@@ -4,8 +4,13 @@ Description: 'CloudFormation template to create IAM role with S3 access and cros
 Parameters:
   TrustedAccountId:
     Type: String
-    Default: '682033486080'
+    Default: ${{ StaticbotAccountId }} 
     Description: AWS Account ID that will be trusted to assume this role
+  ExternalId:
+    Type: String
+    Default: ${{ ExternalId }} 
+    Description: External ID for additional security when assuming the role
+    MinLength: 1
 
 Resources:
   CrossAccountRole:
@@ -24,6 +29,9 @@ Resources:
                 - !Sub 'arn:aws:iam::${TrustedAccountId}:assumed-role/staticbot-dev-cross-account-operator-0/StaticbotSession'
                 - !Sub 'arn:aws:iam::${TrustedAccountId}:assumed-role/staticbot-dev-cross-account-operator-1/StaticbotSession'
             Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Ref ExternalId
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
       Policies:
@@ -40,6 +48,35 @@ Resources:
                 Resource:
                   - 'arn:aws:s3:::*'
                   - 'arn:aws:s3:::*/*'
+        - PolicyName: Route53Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'route53:*'
+                Resource:
+                  - '*'
+        - PolicyName: StaticbotResourcesAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'cloudfront:*'
+                  - 'acm:*'
+                  - 'iam:*'
+                  - 'dynamodb:*'
+                Resource:
+                  - 'arn:aws:s3:::staticbot*'
+                  - 'arn:aws:s3:::staticbot*/*'
+                  - 'arn:aws:cloudfront::*:*'
+                  - 'arn:aws:route53:::*'
+                  - 'arn:aws:acm:*:*:certificate/*'
+                  - 'arn:aws:iam::*:role/staticbot*'
+                  - 'arn:aws:iam::*:policy/staticbot*'
+                  - 'arn:aws:dynamodb:*:*:table/staticbot*'
 
 Outputs:
   RoleARN:
