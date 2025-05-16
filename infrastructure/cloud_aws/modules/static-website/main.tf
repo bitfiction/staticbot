@@ -27,7 +27,7 @@ resource "aws_route53_record" "apex" {
 
 # S3 bucket for website content
 resource "aws_s3_bucket" "website" {
-  bucket = "${var.account_name}-${var.domain_name}-${var.stage_subdomain}"
+  bucket = local.bucket_name
 }
 
 resource "aws_s3_bucket_public_access_block" "website" {
