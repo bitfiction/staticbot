@@ -19,11 +19,13 @@ variable "external_id" {
 
 variable "dynamo_table_name_suffix" {
   type    = string
-  default = "tf-locks"
+  default = ""
+  # default = "-tf-locks"
 }
 
 variable "s3_bucket_name_suffix" {
   type    = string
-  default = "tf-state"
+  default = ""
+  # default = "-tf-state"
 }
 
