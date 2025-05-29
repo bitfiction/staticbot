@@ -11,3 +11,11 @@ module "websites" {
 output "website_urls" {
   value = module.websites.website_urls
 }
+
+output "s3_buckets" {
+  value = module.websites.s3_buckets
+}
+
+output "website_endpoints" {
+  value = module.websites.website_endpoints
+}
