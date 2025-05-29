@@ -13,7 +13,7 @@ locals {
         maintenance_mode        = try(stage.maintenance_mode, false)
         maintenance_allowed_ips = try(stage.maintenance_allowed_ips, [])
         full_domain             = "${stage.subdomain}.${website.domain_name}"
-        content_path            = coalesce(stage.content_path, "${path.module}/../../../../websites/${website.domain_name}/${stage.subdomain}")
+        content_path            = coalesce(stage.content_path, "${path.module}/../../../../websites/${website.domain_name}/${stage.subdomain}") // fallback only for manual deployments
       }
     ]
   ])
