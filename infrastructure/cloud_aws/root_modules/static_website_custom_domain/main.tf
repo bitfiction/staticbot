@@ -22,7 +22,7 @@ module "static_website" {
 
   for_each = {
     for deployment in local.website_stages :
-    "${deployment.website_key}-${deployment.stage_name}" => deployment
+    deployment.full_domain => deployment
   }
 
   providers = {
