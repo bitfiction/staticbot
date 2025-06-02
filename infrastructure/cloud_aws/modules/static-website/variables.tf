@@ -43,10 +43,15 @@ variable "error_response_codes" {
     error_caching_min_ttl = number
   }))
   default = {
+    "403" = {
+      response_code         = 200
+      response_page_path    = "/index.html"
+      error_caching_min_ttl = 10 # Cache this rule for 10 seconds
+    }
     "404" = {
-      response_code         = 404
-      response_page_path    = "/404.html"
-      error_caching_min_ttl = 300
+      response_code         = 200
+      response_page_path    = "/index.html"
+      error_caching_min_ttl = 10 # Cache this rule for 10 seconds
     }
     "500" = {
       response_code         = 500
