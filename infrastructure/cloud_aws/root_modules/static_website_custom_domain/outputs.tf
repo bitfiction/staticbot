@@ -18,3 +18,10 @@ output "website_endpoints" {
     for k, v in module.static_website : k => v.website_endpoint
   }
 }
+
+output "cloudfront_distribution_ids" {
+  description = "CloudFront distribution IDs for each website deployment"
+  value = {
+    for k, v in module.static_website : k => v.cloudfront_distribution_id
+  }
+}
