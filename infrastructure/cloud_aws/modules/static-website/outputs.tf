@@ -11,3 +11,8 @@ output "website_endpoint" {
 output "s3_bucket" {
   value = aws_s3_bucket.website.id
 }
+
+output "cloudfront_distribution_id" {
+  description = "The ID of the CloudFront distribution"
+  value       = aws_cloudfront_distribution.website.id
+}

@@ -19,3 +19,8 @@ output "s3_buckets" {
 output "website_endpoints" {
   value = module.websites.website_endpoints
 }
+
+output "cloudfront_distribution_ids" {
+  description = "CloudFront distribution IDs for each website"
+  value       = { for k, v in module.websites.static_website : k => v.cloudfront_distribution_id }
+}
