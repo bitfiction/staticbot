@@ -155,6 +155,14 @@ resource "aws_s3_object" "index" {
   source       = "${var.content_path}/index.html"
   content_type = "text/html"
   etag         = filemd5("${var.content_path}/index.html")
+
+  lifecycle {
+    ignore_changes = [
+      source,
+      etag,
+      content_type,
+    ]
+  }
 }
 
 # S3 bucket policy
