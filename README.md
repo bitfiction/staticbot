@@ -16,6 +16,8 @@
 
 While Staticbot is designed with a multi-cloud vision for the future, **currently, it exclusively supports AWS.** We plan to expand to other cloud providers.
 
+![Staticbot Dashboard](https://www.staticbot.dev/staticbot_dashboard_3.png)
+
 ## Why Staticbot?
 
 -   **Own Your Infrastructure & Cut Costs**: Deploy for free to your own AWS account, keeping full control, eliminating third-party hosting fees, and only paying for AWS resources.
