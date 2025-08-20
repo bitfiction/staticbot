@@ -1,11 +1,5 @@
 # infrastructure/variables.tf
 
-variable "aws_region" {
-  description = "Default AWS region for resources"
-  type        = string
-  default     = "eu-central-1"
-}
-
 variable "account_name" {
   description = "Account name (bitfiction, guidedleap, agentdev)"
   type        = string

@@ -2,7 +2,6 @@
 
 variable "aws_region" {
   type    = string
-  default = "eu-central-1"
 }
 
 variable "account_name" {
@@ -28,4 +27,3 @@ variable "s3_bucket_name_suffix" {
   default = ""
   # default = "-tf-state"
 }
-
