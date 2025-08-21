@@ -3,7 +3,7 @@ resource "aws_s3_bucket" "terraform_state" {
   bucket = "${var.account_name}${var.s3_bucket_name_suffix}"
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false # allow state cleanup
   }
 }
 
