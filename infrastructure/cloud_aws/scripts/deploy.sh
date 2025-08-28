@@ -5,17 +5,10 @@
 deploy_stage() {
     local website=$1
     local stage=$2
-    echo "Deploying ${website} - ${stage}"
-    tofu plan -target="module.static_website[\"${website}-${stage}\"]"
-    tofu apply -target="module.static_website[\"${website}-${stage}\"]"
-}
-
-# Function to deploy all stages of a website
-deploy_website() {
-    local website=$1
-    echo "Deploying all stages of ${website}"
-    tofu plan -target="module.static_website[\"${website}-*\"]"
-    tofu apply -target="module.static_website[\"${website}-*\"]"
+    local full_domain="${stage}.${website}"
+    echo "Deploying stage '${stage}' for website '${website}' (${full_domain})"
+    tofu plan -target="module.static_website[\"${full_domain}\"]"
+    tofu apply -auto-approve -target="module.static_website[\"${full_domain}\"]"
 }
 
 # Function to deploy all websites in an account
@@ -42,16 +35,12 @@ case $1 in
     stage)
         deploy_stage $2 $3
         ;;
-    website)
-        deploy_website $2
-        ;;
     account)
         deploy_account $2
         ;;
     *)
         echo "Usage:"
-        echo "  Deploy single stage: ./deploy.sh stage <website> <stage>"
-        echo "  Deploy full website: ./deploy.sh website <website>"
-        echo "  Deploy full account: ./deploy.sh account <account>"
+        echo "  Deploy single stage: ./deploy.sh stage <website_domain> <stage_subdomain>"
+        echo "  Deploy full account: ./deploy.sh account <account_name>"
         ;;
 esac

@@ -34,6 +34,7 @@ check_prerequisites() {
 create_terraform_role() {
     local account_name=$1
     local account_id=$2
+    local trusted_account_id=$3
     local role_name="${account_name}-${TERRAFORM_ROLE_NAME}"
     
     if aws iam get-role --role-name "$role_name" 2>/dev/null; then
@@ -52,7 +53,7 @@ create_terraform_role() {
                 {
                     "Effect": "Allow",
                     "Principal": {
-                        "AWS": "arn:aws:iam::'$account_id':root"
+                        "AWS": "arn:aws:iam::'${trusted_account_id}':root"
                     },
                     "Action": "sts:AssumeRole"
                 }
@@ -85,20 +86,22 @@ create_terraform_role() {
 main() {
     local account_name=$1
     local account_id=$2
+    local trusted_account_id=$3
 
-    log_info "Setting up prerequisites for ${account_name} account_name (Account: ${account_id})"
+    log_info "Setting up prerequisites for ${account_name} in target account ${account_id}"
+    log_info "The role will trust the management account: ${trusted_account_id}"
     
     check_prerequisites
-    create_terraform_role "$account_name" "$account_id"
+    create_terraform_role "$account_name" "$account_id" "$trusted_account_id"
 
     log_info "Prerequisites setup complete!"
-    log_info "IAM role: ${account_name}-${TERRAFORM_ROLE_NAME}"
+    log_info "IAM role created: ${account_name}-${TERRAFORM_ROLE_NAME} in account ${account_id}"
 }
 
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 <account_name> <aws-account-id>"
-    echo "Example: $0 prod 111111111111"
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <account_name> <target_aws_account_id> <trusted_management_account_id>"
+    echo "Example: $0 myclient 111122223333 999988887777"
     exit 1
 fi
 
-main "$1" "$2"
+main "$1" "$2" "$3"

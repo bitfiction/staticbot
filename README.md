@@ -31,4 +31,19 @@ While Staticbot is designed with a multi-cloud vision for the future, **currentl
 -   **Stage-Based Deployments**: Supports multiple deployment stages (e.g., dev, preview, www) per website.
 -   **Advanced Hosting Features**: Includes custom error pages, intelligent redirects (language/region, WWW/non-WWW), and maintenance mode support.
 
+## How It Works
+
+This repository contains a reusable, modular Terraform setup for deploying static websites on AWS. The core components are:
+
+-   **S3**: For storing your website's static files.
+-   **CloudFront**: A global Content Delivery Network (CDN) for fast, secure content delivery.
+-   **Route 53**: For managing your custom domain's DNS records.
+-   **ACM (AWS Certificate Manager)**: For free, auto-renewing SSL/TLS certificates.
+
+### Deployment
+
+The infrastructure is managed per-account. All configuration and deployment commands are run from within this repository. For detailed technical instructions on how to deploy a new website or migrate an existing one, please see the infrastructure guide:
+
+-   **[AWS Infrastructure Deployment Guide](./infrastructure/cloud_aws/README.md)**
+
 ---
