@@ -14,6 +14,11 @@ module "domains" {
 
   account_name = var.account_name
   domain_name  = each.value.domain_name
+
+  use_existing_hosted_zone        = each.value.use_existing_hosted_zone
+  use_existing_hosted_zone_id     = each.value.use_existing_hosted_zone_id
+  use_existing_certificate        = each.value.use_existing_cerificate
+  use_existing_certificate_domain = each.value.use_existing_cerificate_domain
 }
 
 # Create static websites for each stage
