@@ -10,6 +10,10 @@ aws_account = {
 websites = {
   "<domain_name>" = {
     domain_name = "<domain_name>"
+    use_existing_cerificate = <use_existing_cerificate>
+    use_existing_cerificate_domain = "<use_existing_cerificate_domain>"
+    use_existing_hosted_zone = <use_existing_hosted_zone>
+    use_existing_hosted_zone_id = "<use_existing_hosted_zone_id>"
     stages = [
       {
         name                    = "<stage_name>"
