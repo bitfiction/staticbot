@@ -63,6 +63,11 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - 'acm:ListCertificates'
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
                   - 's3:*'
                   - 'cloudfront:*'
                   - 'acm:*'
