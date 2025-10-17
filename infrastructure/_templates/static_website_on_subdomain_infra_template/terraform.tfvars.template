@@ -8,9 +8,15 @@ aws_account = {
 }
 
 websites = {
-  "<subdomain>.<domain_name>" = {
-    domain_name = "<domain_name>"
-    subdomain   = "<subdomain>"
+  # The key should be the full domain for the deployment, e.g., "preview.example.com".
+  "<subdomain_name>.<parent_domain_name>" = {
+    # parent_domain_name is the registered domain, e.g., 'example.com'.
+    parent_domain_name = "<parent_domain_name>"
+
+    # subdomain_name is the full subdomain part.
+    # For a 2nd level subdomain (e.g., 'preview.example.com'), use 'preview'.
+    # For a 3rd level subdomain (e.g., 'asd.preview.example.com'), use 'asd.preview'.
+    subdomain_name   = "<subdomain_name>"
     use_existing_certificate = <use_existing_certificate>
     use_existing_certificate_domain = "<use_existing_certificate_domain>"
     use_existing_hosted_zone = <use_existing_hosted_zone>
@@ -22,7 +28,7 @@ websites = {
 }
 
 common_tags = {
-  Domain     = "<subdomain>.<domain_name>"
+  Domain     = "<subdomain_name>.<parent_domain_name>"
   DeployedBy = "Staticbot"
   ManagedBy  = "Terraform"
 }

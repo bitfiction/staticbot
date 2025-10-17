@@ -16,8 +16,14 @@ variable "aws_account" {
 variable "websites" {
   description = "Configuration for websites in this accounts"
   type = map(object({
-    domain_name                     = string
-    subdomain                       = string
+    # parent_domain_name is the registered domain, e.g., 'example.com'.
+    # This is used for managing Route53 hosted zones and certificates.
+    parent_domain_name              = string
+
+    # subdomain_name is the full subdomain part, e.g., 'preview' for 'preview.example.com' (2nd level),
+    # or 'asd.preview' for 'asd.preview.example.com' (3rd level).
+    subdomain_name                  = string
+
     use_existing_certificate        = optional(bool, false)
     use_existing_certificate_domain = optional(string, null)
     use_existing_hosted_zone        = optional(bool, false)
