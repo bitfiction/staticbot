@@ -16,15 +16,15 @@ variable "aws_account" {
 variable "websites" {
   description = "Configuration for websites in this accounts"
   type = map(object({
-    domain_name                    = string
-    subdomain                      = string
-    use_existing_certificate       = optional(bool, false)
+    domain_name                     = string
+    subdomain                       = string
+    use_existing_certificate        = optional(bool, false)
     use_existing_certificate_domain = optional(string, null)
-    use_existing_hosted_zone       = optional(bool, false)
-    use_existing_hosted_zone_id    = optional(string, null)
-    content_path                   = string
-    maintenance_mode               = bool
-    maintenance_allowed_ips        = list(string)
+    use_existing_hosted_zone        = optional(bool, false)
+    use_existing_hosted_zone_id     = optional(string, null)
+    content_path                    = string
+    maintenance_mode                = bool
+    maintenance_allowed_ips         = list(string)
   }))
 }
 
