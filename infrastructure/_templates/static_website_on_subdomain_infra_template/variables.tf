@@ -17,8 +17,9 @@ variable "websites" {
   description = "Configuration for websites in this accounts"
   type = map(object({
     domain_name                    = string
-    use_existing_cerificate        = optional(bool, false)
-    use_existing_cerificate_domain = optional(string, null)
+    subdomain                      = string
+    use_existing_certificate       = optional(bool, false)
+    use_existing_certificate_domain = optional(string, null)
     use_existing_hosted_zone       = optional(bool, false)
     use_existing_hosted_zone_id    = optional(string, null)
     content_path                   = string

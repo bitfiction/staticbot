@@ -8,20 +8,21 @@ aws_account = {
 }
 
 websites = {
-  "<domain_name>" = {
+  "<subdomain>.<domain_name>" = {
     domain_name = "<domain_name>"
-    use_existing_cerificate = <use_existing_cerificate>
-    use_existing_cerificate_domain = "<use_existing_cerificate_domain>"
+    subdomain   = "<subdomain>"
+    use_existing_certificate = <use_existing_certificate>
+    use_existing_certificate_domain = "<use_existing_certificate_domain>"
     use_existing_hosted_zone = <use_existing_hosted_zone>
     use_existing_hosted_zone_id = "<use_existing_hosted_zone_id>"
-    content_path            = "<stage_content_path>"
+    content_path            = "<content_path>"
     maintenance_mode        = false
     maintenance_allowed_ips = []
   }
 }
 
 common_tags = {
-  Domain     = "<domain_name>"
+  Domain     = "<subdomain>.<domain_name>"
   DeployedBy = "Staticbot"
   ManagedBy  = "Terraform"
 }

@@ -19,18 +19,26 @@ variable "websites" {
   description = "Configuration for websites in this accounts"
   type = map(object({
     domain_name = string
-    use_existing_cerificate        = optional(bool, false)
-    use_existing_cerificate_domain = optional(string, null)
+    use_existing_certificate        = optional(bool, false)
+    use_existing_certificate_domain = optional(string, null)
     use_existing_hosted_zone       = optional(bool, false)
     use_existing_hosted_zone_id    = optional(string, null)
-    stages = list(object({
+
+    # For single subdomain deployment
+    subdomain               = optional(string)
+    content_path            = optional(string)
+    maintenance_mode        = optional(bool, false)
+    maintenance_allowed_ips = optional(list(string), [])
+
+    # For multi-stage deployments
+    stages = optional(list(object({
       name                    = string
       subdomain               = string
       www_redirect            = bool
       content_path            = string
       maintenance_mode        = bool
       maintenance_allowed_ips = list(string)
-    }))
+    })))
   }))
 }
 
