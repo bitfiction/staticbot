@@ -1,0 +1,27 @@
+account_name = "<account_name>"
+
+aws_account = {
+  account_id = "<target_account_id>"
+  role_arn = "<target_role_arn>"
+  region   = "<target_region>"
+  external_id = "<external_id>"
+}
+
+websites = {
+  "<domain_name>" = {
+    domain_name = "<domain_name>"
+    use_existing_cerificate = <use_existing_cerificate>
+    use_existing_cerificate_domain = "<use_existing_cerificate_domain>"
+    use_existing_hosted_zone = <use_existing_hosted_zone>
+    use_existing_hosted_zone_id = "<use_existing_hosted_zone_id>"
+    content_path            = "<stage_content_path>"
+    maintenance_mode        = false
+    maintenance_allowed_ips = []
+  }
+}
+
+common_tags = {
+  Domain     = "<domain_name>"
+  DeployedBy = "Staticbot"
+  ManagedBy  = "Terraform"
+}
