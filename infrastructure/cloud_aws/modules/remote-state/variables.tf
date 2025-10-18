@@ -1,7 +1,7 @@
 # infrastructure/remote-state/variables.tf
 
 variable "aws_region" {
-  type    = string
+  type = string
 }
 
 variable "account_name" {

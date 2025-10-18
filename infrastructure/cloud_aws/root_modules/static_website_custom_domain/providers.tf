@@ -12,7 +12,7 @@ provider "aws" {
   region = var.aws_account.region
 
   assume_role {
-    role_arn = var.aws_account.role_arn
+    role_arn    = var.aws_account.role_arn
     external_id = var.aws_account.external_id
   }
 
@@ -29,7 +29,7 @@ provider "aws" {
   region = "us-east-1"
 
   assume_role {
-    role_arn = var.aws_account.role_arn
+    role_arn    = var.aws_account.role_arn
     external_id = var.aws_account.external_id
   }
 

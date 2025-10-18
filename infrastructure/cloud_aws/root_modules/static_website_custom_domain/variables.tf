@@ -8,9 +8,9 @@ variable "account_name" {
 variable "aws_account" {
   description = "AWS account configuration"
   type = object({
-    account_id = string
-    role_arn   = string
-    region     = string
+    account_id  = string
+    role_arn    = string
+    region      = string
     external_id = string
   })
 }
@@ -18,11 +18,11 @@ variable "aws_account" {
 variable "websites" {
   description = "Configuration for websites in this accounts"
   type = map(object({
-    domain_name = string
+    domain_name                     = string
     use_existing_certificate        = optional(bool, false)
     use_existing_certificate_domain = optional(string, null)
-    use_existing_hosted_zone       = optional(bool, false)
-    use_existing_hosted_zone_id    = optional(string, null)
+    use_existing_hosted_zone        = optional(bool, false)
+    use_existing_hosted_zone_id     = optional(string, null)
 
     # For single subdomain deployment
     subdomain               = optional(string)

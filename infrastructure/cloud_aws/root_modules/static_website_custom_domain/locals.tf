@@ -17,7 +17,7 @@ locals {
           full_domain             = "${stage.subdomain}.${website.domain_name}"
           content_path            = coalesce(stage.content_path, "${path.module}/../../../../websites/${website.domain_name}/${stage.subdomain}") // fallback only for manual deployments
         }
-      ] : [ # Subdomain deployment
+        ] : [ # Subdomain deployment
         {
           website_key             = website_key
           domain_name             = website.domain_name

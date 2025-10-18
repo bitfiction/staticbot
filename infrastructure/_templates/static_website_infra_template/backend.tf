@@ -6,6 +6,6 @@ terraform {
     # region         = "us-east-1"
     # dynamodb_table = "prod-terraform-locks"
     # role_arn       = "arn:aws:iam::111111111111:role/prod-terraform-role"
-    encrypt        = true
+    encrypt = true
   }
 }
