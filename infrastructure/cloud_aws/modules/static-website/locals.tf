@@ -2,8 +2,8 @@ locals {
   domain_name_underscore = replace(var.domain_name, ".", "_")
 
   # In subdomain deployments, stage_subdomain can be empty.
-  # We construct the full domain part of the bucket name carefully.
-  domain_part = var.stage_subdomain == "" || var.stage_subdomain == null ? var.domain_name : "${var.stage_subdomain}.${var.domain_name}"
+  # We construct the full domain part of the bucket name carefully, avoiding leading/trailing dots.
+  domain_part = join(".", compact([var.stage_subdomain, var.domain_name]))
 
   s3_origin_id = "S3-${local.domain_part}"
 
@@ -16,6 +16,6 @@ locals {
   # Use the shorter of actual length or max allowed length
   truncated_account_name = substr(var.account_name, 0, min(length(var.account_name), local.max_account_name_length))
 
-  # Construct the final bucket name, ensuring it doesn't end with a period.
-  bucket_name = trimsuffix("${local.truncated_account_name}-${local.domain_part}", ".")
+  # Construct the final bucket name.
+  bucket_name = "${local.truncated_account_name}-${local.domain_part}"
 }
