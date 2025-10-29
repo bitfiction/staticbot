@@ -1,13 +1,14 @@
 locals {
   domain_name_underscore = replace(var.domain_name, ".", "_")
 
-  s3_origin_id = "S3-${var.stage_subdomain}.${var.domain_name}"
-}
+  # In subdomain deployments, stage_subdomain can be empty.
+  # We construct the full domain part of the bucket name carefully.
+  domain_part = var.stage_subdomain == "" || var.stage_subdomain == null ? var.domain_name : "${var.stage_subdomain}.${var.domain_name}"
 
+  s3_origin_id = "S3-${local.domain_part}"
 
-locals {
   # Calculate the length needed for the fixed parts
-  fixed_part_length = length("${var.stage_subdomain}.${var.domain_name}") + 1 # +1 for the hyphen
+  fixed_part_length = length(local.domain_part) + 1 # +1 for the hyphen
 
   # Calculate the maximum allowed length for account_name
   max_account_name_length = 63 - local.fixed_part_length
@@ -15,6 +16,6 @@ locals {
   # Use the shorter of actual length or max allowed length
   truncated_account_name = substr(var.account_name, 0, min(length(var.account_name), local.max_account_name_length))
 
-  # Construct the final bucket name
-  bucket_name = "${local.truncated_account_name}-${var.stage_subdomain}.${var.domain_name}"
+  # Construct the final bucket name, ensuring it doesn't end with a period.
+  bucket_name = trimsuffix("${local.truncated_account_name}-${local.domain_part}", ".")
 }

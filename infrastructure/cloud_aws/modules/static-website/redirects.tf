@@ -60,6 +60,7 @@ EOF
 
 # CloudFront function for www/non-www redirects
 resource "aws_cloudfront_function" "www_redirect" {
+  count   = var.www_redirect ? 1 : 0
   name    = "${var.stage_subdomain}_${local.domain_name_underscore}-www-redirect"
   runtime = "cloudfront-js-1.0"
   comment = "Redirects between www and non-www versions"

@@ -104,7 +104,7 @@ resource "aws_cloudfront_distribution" "website" {
       for_each = var.www_redirect ? [1] : []
       content {
         event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.www_redirect.arn
+        function_arn = aws_cloudfront_function.www_redirect[0].arn
       }
     }
 
