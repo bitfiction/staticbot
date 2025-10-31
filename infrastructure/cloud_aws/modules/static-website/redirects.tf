@@ -2,7 +2,7 @@
 
 # CloudFront function for language/region redirects
 resource "aws_cloudfront_function" "language_redirect" {
-  name    = "lang-redir-${substr(sha1("${var.account_name}-${local.sanitized_domain_part_for_naming}"), 0, 10)}"
+  name    = "lang-redir-${substr(sha1("${var.account_name}-${local.domain_part}"), 0, 10)}"
   runtime = "cloudfront-js-1.0"
   comment = "Redirects users based on their location/language"
 
@@ -61,7 +61,7 @@ EOF
 # CloudFront function for www/non-www redirects
 resource "aws_cloudfront_function" "www_redirect" {
   count   = var.www_redirect ? 1 : 0
-  name    = "www-redir-${substr(sha1("${var.account_name}-${local.sanitized_domain_part_for_naming}"), 0, 10)}"
+  name    = "www-redir-${substr(sha1("${var.account_name}-${local.domain_part}"), 0, 10)}"
   runtime = "cloudfront-js-1.0"
   comment = "Redirects between www and non-www versions"
 
@@ -115,7 +115,7 @@ EOF
 
 # CloudFront function for maintenance mode
 resource "aws_cloudfront_function" "maintenance_mode" {
-  name    = "maint-mode-${substr(sha1("${var.account_name}-${local.sanitized_domain_part_for_naming}"), 0, 10)}"
+  name    = "maint-mode-${substr(sha1("${var.account_name}-${local.domain_part}"), 0, 10)}"
   runtime = "cloudfront-js-1.0"
   comment = "Handles maintenance mode redirects"
 

@@ -1,6 +1,4 @@
 locals {
-  domain_name_underscore = replace(var.domain_name, ".", "_")
-
   # In subdomain deployments, stage_subdomain can be empty.
   # We construct the full domain part of the bucket name carefully, avoiding leading/trailing dots.
   domain_part = join(".", compact([var.stage_subdomain, var.domain_name]))
@@ -18,9 +16,4 @@ locals {
 
   # Construct the final bucket name.
   bucket_name = "${local.truncated_account_name}-${local.domain_part}"
-
-  # Sanitize domain parts for resource naming. CloudFront Function names must match [a-zA-Z0-9-_]{1,64}.
-  # We create a sanitized string by converting to lowercase, replacing any invalid characters with a hyphen,
-  # and truncating to a safe length.
-  sanitized_domain_part_for_naming = substr(lower(replace(local.domain_part, /[^a-zA-Z0-9_-]/, "-")), 0, 40)
 }
