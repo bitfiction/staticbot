@@ -18,4 +18,7 @@ locals {
 
   # Construct the final bucket name.
   bucket_name = "${local.truncated_account_name}-${local.domain_part}"
+
+  # Sanitize domain parts for resource naming that doesn't allow dots.
+  sanitized_domain_part_for_naming = replace(local.domain_part, ".", "-")
 }
