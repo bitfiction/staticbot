@@ -31,3 +31,9 @@ variable "use_existing_certificate_domain" {
   type        = string
   default     = null
 }
+
+variable "certificate_domain_name" {
+  description = "Domain name for the ACM certificate. Defaults to domain_name if not set."
+  type        = string
+  default     = null
+}

@@ -1,19 +1,26 @@
 # infrastructure/main.tf
 
+locals {
+  websites_with_cert_domain = {
+    for website_key, website in var.websites : website_key => merge(website, {
+      certificate_domain_name = try(website.subdomain, null) != null && can(regex("\\.", website.subdomain)) ? join(".", [join(".", slice(split(".", website.subdomain), 1, length(split(".", website.subdomain)))), website.domain_name]) : website.domain_name
+    })
+  }
+}
+
 # Create domain resources once per domain
 module "domains" {
   source = "../../modules/domain"
 
-  for_each = {
-    for website_key, website in var.websites : website_key => website
-  }
+  for_each = local.websites_with_cert_domain
 
   providers = {
     aws.certificates = aws.certificates
   }
 
-  account_name = var.account_name
-  domain_name  = each.value.domain_name
+  account_name            = var.account_name
+  domain_name             = each.value.domain_name
+  certificate_domain_name = each.value.certificate_domain_name
 
   use_existing_hosted_zone        = each.value.use_existing_hosted_zone
   use_existing_hosted_zone_id     = each.value.use_existing_hosted_zone_id
