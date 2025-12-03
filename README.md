@@ -1,18 +1,28 @@
-<h1 align="center">Unpark.ai</h1>
+<h1 align="center">Unpark.ai / Staticbot.dev</h1>
 
 <p align="center">
   <i>You own the domain. It's time to launch the project.</i>
   <br />
+  <i>How Founders deploy websites.</i>
+  <br />
   Unpark turns your forgotten domains into real projects in minutes.
+  <br />
+  Host landing pages and email capture sites inside your own AWS account.
   <br />
   AI ideas → AI copy → AI design → deployed instantly.
   <br />
+  Infrastructure code available - no lock in.
+  <br />
   <a href="https://www.unpark.ai/"><strong>Learn more at unpark.ai</strong></a>
+  <br />
+  <a href="https://www.staticbot.dev/"><strong>Learn more at staticbot.dev</strong></a>
 </p>
 
 ---
 
-[Unpark.ai](https://www.unpark.ai/) (formerly Staticbot) helps founders and SaaS businesses deploy and manage static websites directly within their own AWS accounts. It provides reliable, cost-effective hosting using S3 and CloudFront, with complete transparency and no vendor lock-in. You always own your infrastructure.
+[Unpark.ai](https://www.unpark.ai/) helps founders and SaaS businesses activate their unused domains using AI (ideas → copy → design), deployed instantly.
+
+[Staticbot](https://www.staticbot.dev/) helps founders and SaaS businesses deploy and manage websites directly within their own AWS accounts. It provides reliable, cost-effective hosting using S3 and CloudFront, with complete transparency and no vendor lock-in. You always own your infrastructure.
 
 While Unpark.ai is designed with a multi-cloud vision for the future, **currently, it exclusively supports AWS.** We plan to expand to other cloud providers.
 
