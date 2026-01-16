@@ -55,12 +55,11 @@ resource "aws_acm_certificate" "cert" {
 # Validate ACM certificate
 resource "aws_route53_record" "cert_validation" {
   for_each = var.use_existing_certificate ? {} : {
-    for dvo in aws_acm_certificate.cert[0].domain_validation_options : dvo.domain_name => {
+    for dvo in aws_acm_certificate.cert[0].domain_validation_options : dvo.resource_record_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
     }
-    if !contains(["*.${local.cert_domain}"], dvo.domain_name) # Skip wildcard domain validation
   }
 
   zone_id         = var.use_existing_hosted_zone ? data.aws_route53_zone.existing[0].zone_id : aws_route53_zone.main[0].zone_id
