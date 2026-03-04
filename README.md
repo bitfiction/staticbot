@@ -1,11 +1,9 @@
-<h1 align="center">Unpark.ai / Staticbot.dev</h1>
+<h1 align="center">Staticbot.dev</h1>
 
 <p align="center">
   <i>You own the domain. It's time to launch the project.</i>
   <br />
   <i>How Founders deploy websites.</i>
-  <br />
-  Unpark turns your forgotten domains into real projects in minutes.
   <br />
   Host landing pages and email capture sites inside your own AWS account.
   <br />
@@ -13,25 +11,19 @@
   <br />
   Infrastructure code available - no lock in.
   <br />
-  <a href="https://www.unpark.ai/"><strong>Learn more at unpark.ai</strong></a>
-  <br />
   <a href="https://www.staticbot.dev/"><strong>Learn more at staticbot.dev</strong></a>
 </p>
 
 ---
 
-[Unpark.ai](https://www.unpark.ai/) helps founders and SaaS businesses activate their unused domains using AI (ideas → copy → design), deployed instantly.
-
 [Staticbot](https://www.staticbot.dev/) helps founders and SaaS businesses deploy and manage websites directly within their own AWS accounts. It provides reliable, cost-effective hosting using S3 and CloudFront, with complete transparency and no vendor lock-in. You always own your infrastructure.
 
-While Unpark.ai is designed with a multi-cloud vision for the future, **currently, it exclusively supports AWS.** We plan to expand to other cloud providers.
-
-## Why Unpark.ai?
+## Why Staticbot?
 
 -   **Own Your Infrastructure & Cut Costs**: Deploy for free to your own AWS account, keeping full control, eliminating third-party hosting fees, and only paying for AWS resources.
--   **No Vendor Lock-in**: Export the Terraform code at any time and continue using your infrastructure without Unpark.ai.
+-   **No Vendor Lock-in**: Export the Terraform code at any time and continue using your infrastructure without Staticbot.
 -   **Global Performance & Reliability**: Leverages AWS S3 and CloudFront for fast load times, global CDN distribution, and high availability.
--   **Effortless Custom Domains & SSL**: Easily connect your custom domains. Unpark.ai handles SSL certificate provisioning and renewals via AWS Certificate Manager.
+-   **Effortless Custom Domains & SSL**: Easily connect your custom domains. Staticbot handles SSL certificate provisioning and renewals via AWS Certificate Manager.
 -   **AI Builder Integration**: Seamlessly integrates with tools like Lovable.dev and other AI builders via GitHub for streamlined development workflows.
 -   **Private Repository Support**: Supports private GitHub repos, perfect for nights & weekends projects, internal tools, or client work while maintaining privacy.
 -   **Complete Transparency**: The underlying Terraform infrastructure code is always available, allowing you to take over and manage it independently whenever you wish.
