@@ -58,152 +58,83 @@ function handler(event) {
 EOF
 }
 
-# CloudFront function for www/non-www redirects
-resource "aws_cloudfront_function" "www_redirect" {
-  count   = var.www_redirect ? 1 : 0
-  name    = "www-redir-${substr(sha1("${var.account_name}-${local.domain_part}"), 0, 10)}"
-  runtime = "cloudfront-js-1.0"
-  comment = "Redirects between www and non-www versions"
+# Combined viewer-request handler.
+#
+# Runs on every request and handles three concerns in priority order:
+#   1. Maintenance mode  — redirect all traffic (except allowed IPs) to /maintenance.html
+#   2. www redirect      — canonicalise the host to www.{domain} (when enabled)
+#   3. Directory index   — rewrite clean URLs to their actual S3 object keys:
+#        /about/  →  /about/index.html   (Next.js static export with trailingSlash: true)
+#        /about   →  /about.html         (Next.js static export without trailingSlash)
+#      Static assets (paths containing a dot in the last segment) are left unchanged.
+#      This is a no-op for SPAs — extensionless paths still 404 in S3 and the
+#      custom_error_response rule then serves root index.html as before.
+resource "aws_cloudfront_function" "viewer_request" {
+  name    = "viewer-req-${substr(sha1("${var.account_name}-${local.domain_part}"), 0, 10)}"
+  runtime = "cloudfront-js-2.0"
+  comment = "Directory index routing, optional www redirect, optional maintenance mode"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   code = <<-EOF
 function handler(event) {
     var request = event.request;
-    var host = request.headers.host.value;
-    var domain = '${var.domain_name}';
-    
-    if (host.startsWith('dev.')) {
-        // Don't redirect dev environments
-        return request;
-    }
+    var uri = request.uri;
+    var host = request.headers.host ? request.headers.host.value : '';
 
-    // Configure preferred domain format (www or non-www)
-    var useWWW = true;  // Set to false to prefer non-www
-    
-     // Handle both direct domain and www cases
-     if (useWWW && (host === domain || !host.startsWith('www.'))) {
-        return {
-            statusCode: 301,
-            statusDescription: 'Moved Permanently',
-            headers: {
-                'location': {
-                    value: 'https://www.' + domain + request.uri
-                },
-                'cache-control': {
-                    value: 'max-age=3600'
-                }
-            }
-        };
-    } else if (!useWWW && host.startsWith('www.')) {
-        return {
-            statusCode: 301,
-            statusDescription: 'Moved Permanently',
-            headers: {
-                'location': {
-                    value: 'https://' + domain + request.uri
-                },
-                'cache-control': {
-                    value: 'max-age=3600'
-                }
-            }
-        };
-    }
-    
-    return request;
-}
-EOF
-}
-
-# CloudFront function for maintenance mode
-resource "aws_cloudfront_function" "maintenance_mode" {
-  name    = "maint-mode-${substr(sha1("${var.account_name}-${local.domain_part}"), 0, 10)}"
-  runtime = "cloudfront-js-1.0"
-  comment = "Handles maintenance mode redirects"
-
-  code = <<-EOF
-function handler(event) {
-    var request = event.request;
-    
-    // Maintenance mode configuration
-    var maintenanceMode = false;  // Control via variable or SSM Parameter
-    var allowedIPs = ['1.2.3.4', '5.6.7.8'];  // Admin IPs that can bypass
+    // === MAINTENANCE MODE ===
+    var maintenanceMode = ${var.maintenance_mode};
+    var allowedIPs = ${jsonencode(var.maintenance_allowed_ips)};
     var maintenancePath = '/maintenance.html';
-    
-    // Skip redirect for maintenance page itself
-    if (request.uri === maintenancePath) {
-        return request;
-    }
-    
-    // Check if maintenance mode is active
-    if (maintenanceMode) {
-        // Allow specific IPs to bypass
-        var clientIP = request.clientIp;
-        if (allowedIPs.includes(clientIP)) {
-            return request;
-        }
-        
-        // Redirect all other traffic to maintenance page
-        return {
-            statusCode: 302,
-            statusDescription: 'Found',
-            headers: {
-                'location': {
-                    value: maintenancePath
-                },
-                'cache-control': {
-                    value: 'no-cache'
+
+    if (maintenanceMode && uri !== maintenancePath) {
+        if (!allowedIPs.includes(request.clientIp)) {
+            return {
+                statusCode: 302,
+                statusDescription: 'Found',
+                headers: {
+                    'location': { value: maintenancePath },
+                    'cache-control': { value: 'no-cache' }
                 }
-            }
-        };
+            };
+        }
     }
-    
+
+    // === WWW REDIRECT ===
+    var wwwRedirect = ${var.www_redirect};
+    var domain = '${var.domain_name}';
+
+    if (wwwRedirect && !host.startsWith('dev.')) {
+        if (host === domain || !host.startsWith('www.')) {
+            return {
+                statusCode: 301,
+                statusDescription: 'Moved Permanently',
+                headers: {
+                    'location': { value: 'https://www.' + domain + uri },
+                    'cache-control': { value: 'max-age=3600' }
+                }
+            };
+        }
+    }
+
+    // === DIRECTORY INDEX ===
+    // Only rewrite if the last path segment has no file extension (i.e. not an asset).
+    var lastSegment = uri.split('/').pop();
+    var hasExtension = lastSegment.includes('.');
+
+    if (!hasExtension) {
+        if (uri.endsWith('/') && uri.length > 1) {
+            // /about/ → /about/index.html  (Next.js trailingSlash: true)
+            request.uri = uri + 'index.html';
+        } else if (!uri.endsWith('/')) {
+            // /about → /about.html  (Next.js default, no trailingSlash)
+            request.uri = uri + '.html';
+        }
+    }
+
     return request;
 }
 EOF
-}
-
-# Create maintenance page
-resource "aws_s3_object" "maintenance_page" {
-  bucket       = aws_s3_bucket.website.id
-  key          = "maintenance.html"
-  content      = <<EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Maintenance - ${var.domain_name}</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: #f5f5f5;
-            text-align: center;
-        }
-        .maintenance-container {
-            max-width: 600px;
-            padding: 40px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 { color: #333; margin-bottom: 20px; }
-        p { color: #666; }
-    </style>
-</head>
-<body>
-    <div class="maintenance-container">
-        <h1>Site Maintenance</h1>
-        <p>We're currently performing scheduled maintenance. Please check back soon.</p>
-        <p>Expected duration: 30 minutes</p>
-    </div>
-</body>
-</html>
-EOF
-  content_type = "text/html"
 }

@@ -99,21 +99,10 @@ resource "aws_cloudfront_distribution" "website" {
     default_ttl = 3600
     max_ttl     = 86400
 
-    # Function associations
-    dynamic "function_association" {
-      for_each = var.www_redirect ? [1] : []
-      content {
-        event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.www_redirect[0].arn
-      }
-    }
-
-    dynamic "function_association" {
-      for_each = var.maintenance_mode ? [1] : []
-      content {
-        event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.maintenance_mode.arn
-      }
+    # Single viewer-request handler: directory index routing + optional www redirect + optional maintenance mode
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.viewer_request.arn
     }
   }
 
