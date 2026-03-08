@@ -59,7 +59,7 @@ resource "aws_route53_record" "cert_validation" {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
       type   = dvo.resource_record_type
-    }
+    }...
   }
 
   zone_id         = var.use_existing_hosted_zone ? data.aws_route53_zone.existing[0].zone_id : aws_route53_zone.main[0].zone_id
