@@ -128,6 +128,10 @@ resource "aws_security_group" "alb" {
   tags = {
     Name = "${local.sanitized_name}-alb-sg"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_security_group" "ecs_tasks" {
@@ -161,6 +165,10 @@ resource "aws_security_group" "ecs_tasks" {
   tags = {
     Name = "${local.sanitized_name}-ecs-tasks-sg"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_security_group" "efs" {
@@ -185,6 +193,10 @@ resource "aws_security_group" "efs" {
 
   tags = {
     Name = "${local.sanitized_name}-efs-sg"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
