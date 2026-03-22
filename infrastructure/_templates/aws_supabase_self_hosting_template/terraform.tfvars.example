@@ -1,0 +1,44 @@
+# AWS Region
+aws_region = "us-east-1"
+
+# Project Name
+project_name = "supabase-self-hosted"
+
+# Network
+vpc_cidr = "10.0.0.0/16"
+
+# Database Secrets
+postgres_password    = "your-super-secret-postgres-password"
+pg_meta_crypto_key   = "your-32-char-min-pg-meta-crypto-key"
+
+# Supabase Secrets
+anon_key         = "your-anon-key-generated-from-jwt-secret"
+service_role_key = "your-service-role-key-generated-from-jwt-secret"
+jwt_secret       = "your-super-secret-jwt-secret-at-least-32-chars"
+secret_key_base  = "your-super-secret-key-base-for-realtime"
+vault_enc_key    = "your-super-secret-vault-enc-key-32-chars"
+
+# Analytics (Logflare)
+logflare_public_access_token  = "your-logflare-public-token"
+logflare_private_access_token = "your-logflare-private-token"
+
+# Dashboard (Kong)
+dashboard_password = "your-dashboard-password"
+
+# URLs
+supabase_public_url = "http://<alb-dns-name>:8000" # Update after deployment or use custom domain
+api_external_url    = "http://<alb-dns-name>:8000"
+site_url            = "http://localhost:3000" # Your frontend URL
+
+# SMTP
+smtp_admin_email = "admin@example.com"
+smtp_host        = "smtp.example.com"
+smtp_port        = 587
+smtp_user        = "smtp_user"
+smtp_pass        = "smtp_pass"
+smtp_sender_name = "Supabase"
+
+# Auth Config
+enable_email_signup    = true
+enable_anonymous_users = false
+disable_signup         = false
