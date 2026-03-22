@@ -208,6 +208,7 @@ Resources:
                   - 'elasticfilesystem:UntagResource'
                   - 'elasticfilesystem:ListTagsForResource'
                   - 'elasticfilesystem:DescribeFileSystemPolicy'
+                  - 'elasticfilesystem:DescribeLifecycleConfiguration'
                 Resource: '*'
 
         # --- IAM (scoped to staticbot* roles/policies) ---
@@ -252,11 +253,15 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # DescribeLogGroups is a list API that cannot be scoped to specific log groups
+              - Effect: Allow
+                Action:
+                  - 'logs:DescribeLogGroups'
+                Resource: '*'
               - Effect: Allow
                 Action:
                   - 'logs:CreateLogGroup'
                   - 'logs:DeleteLogGroup'
-                  - 'logs:DescribeLogGroups'
                   - 'logs:PutRetentionPolicy'
                   - 'logs:DeleteRetentionPolicy'
                   - 'logs:TagLogGroup'

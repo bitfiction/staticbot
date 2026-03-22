@@ -170,7 +170,8 @@
                 "elasticfilesystem:TagResource",
                 "elasticfilesystem:UntagResource",
                 "elasticfilesystem:ListTagsForResource",
-                "elasticfilesystem:DescribeFileSystemPolicy"
+                "elasticfilesystem:DescribeFileSystemPolicy",
+                "elasticfilesystem:DescribeLifecycleConfiguration"
             ],
             "Resource": "*"
         },
@@ -218,12 +219,19 @@
             }
         },
         {
+            "Sid": "CloudWatchLogsDescribe",
+            "Effect": "Allow",
+            "Action": [
+                "logs:DescribeLogGroups"
+            ],
+            "Resource": "*"
+        },
+        {
             "Sid": "CloudWatchLogs",
             "Effect": "Allow",
             "Action": [
                 "logs:CreateLogGroup",
                 "logs:DeleteLogGroup",
-                "logs:DescribeLogGroups",
                 "logs:PutRetentionPolicy",
                 "logs:DeleteRetentionPolicy",
                 "logs:TagLogGroup",

@@ -243,7 +243,8 @@
                     "elasticfilesystem:TagResource",
                     "elasticfilesystem:UntagResource",
                     "elasticfilesystem:ListTagsForResource",
-                    "elasticfilesystem:DescribeFileSystemPolicy"
+                    "elasticfilesystem:DescribeFileSystemPolicy",
+                    "elasticfilesystem:DescribeLifecycleConfiguration"
                   ],
                   "Resource": "*"
                 }
@@ -307,9 +308,15 @@
                 {
                   "Effect": "Allow",
                   "Action": [
+                    "logs:DescribeLogGroups"
+                  ],
+                  "Resource": "*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
                     "logs:CreateLogGroup",
                     "logs:DeleteLogGroup",
-                    "logs:DescribeLogGroups",
                     "logs:PutRetentionPolicy",
                     "logs:DeleteRetentionPolicy",
                     "logs:TagLogGroup",
