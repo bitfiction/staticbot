@@ -1,0 +1,2 @@
+aws_region   = "<target_region>"
+project_name = "<account_name>"
