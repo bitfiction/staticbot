@@ -4,7 +4,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "${var.project_name}-vpc"
+    Name = "${local.sanitized_name}-vpc"
   }
 }
 
@@ -19,7 +19,7 @@ resource "aws_subnet" "public" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name = "${var.project_name}-public-${count.index + 1}"
+    Name = "${local.sanitized_name}-public-${count.index + 1}"
   }
 }
 
@@ -30,7 +30,7 @@ resource "aws_subnet" "private" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name = "${var.project_name}-private-${count.index + 1}"
+    Name = "${local.sanitized_name}-private-${count.index + 1}"
   }
 }
 
@@ -38,7 +38,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "${var.project_name}-igw"
+    Name = "${local.sanitized_name}-igw"
   }
 }
 
@@ -51,7 +51,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[0].id
 
   tags = {
-    Name = "${var.project_name}-nat"
+    Name = "${local.sanitized_name}-nat"
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -66,7 +66,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "${var.project_name}-public-rt"
+    Name = "${local.sanitized_name}-public-rt"
   }
 }
 
@@ -85,7 +85,7 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name = "${var.project_name}-private-rt"
+    Name = "${local.sanitized_name}-private-rt"
   }
 }
 
@@ -98,7 +98,7 @@ resource "aws_route_table_association" "private" {
 # --- Security Groups ---
 
 resource "aws_security_group" "alb" {
-  name        = "${var.project_name}-alb-sg"
+  name        = "${local.sanitized_name}-alb-sg"
   description = "Allow HTTP/HTTPS traffic"
   vpc_id      = aws_vpc.main.id
 
@@ -126,12 +126,12 @@ resource "aws_security_group" "alb" {
   }
 
   tags = {
-    Name = "${var.project_name}-alb-sg"
+    Name = "${local.sanitized_name}-alb-sg"
   }
 }
 
 resource "aws_security_group" "ecs_tasks" {
-  name        = "${var.project_name}-ecs-tasks-sg"
+  name        = "${local.sanitized_name}-ecs-tasks-sg"
   description = "Allow traffic from ALB and internal communication"
   vpc_id      = aws_vpc.main.id
 
@@ -159,12 +159,12 @@ resource "aws_security_group" "ecs_tasks" {
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-tasks-sg"
+    Name = "${local.sanitized_name}-ecs-tasks-sg"
   }
 }
 
 resource "aws_security_group" "efs" {
-  name        = "${var.project_name}-efs-sg"
+  name        = "${local.sanitized_name}-efs-sg"
   description = "Allow NFS traffic from ECS tasks"
   vpc_id      = aws_vpc.main.id
 
@@ -184,7 +184,7 @@ resource "aws_security_group" "efs" {
   }
 
   tags = {
-    Name = "${var.project_name}-efs-sg"
+    Name = "${local.sanitized_name}-efs-sg"
   }
 }
 
@@ -198,7 +198,7 @@ resource "aws_lb" "main" {
   subnets            = aws_subnet.public[*].id
 
   tags = {
-    Name = "${var.project_name}-alb"
+    Name = "${local.sanitized_name}-alb"
   }
 }
 

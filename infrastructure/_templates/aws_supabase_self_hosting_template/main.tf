@@ -24,8 +24,11 @@ provider "aws" {
 }
 
 locals {
+  # Sanitize project name: collapse multiple hyphens, strip trailing hyphens
+  sanitized_name = replace(replace(var.project_name, "/--+/", "-"), "/-$/", "")
+
   # Truncated names for resources with strict AWS length limits
   # ALB target groups: max 32 chars, IAM roles/policies: max 64 chars
-  short_name = substr(var.project_name, 0, 22)
-  iam_name   = substr(var.project_name, 0, 48)
+  short_name = replace(substr(local.sanitized_name, 0, 22), "/-$/", "")
+  iam_name   = replace(substr(local.sanitized_name, 0, 48), "/-$/", "")
 }

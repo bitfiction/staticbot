@@ -30,7 +30,7 @@ resource "aws_service_discovery_service" "auth" {
 }
 
 resource "aws_ecs_task_definition" "auth" {
-  family                   = "${var.project_name}-auth"
+  family                   = "${local.sanitized_name}-auth"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -129,7 +129,7 @@ resource "aws_service_discovery_service" "rest" {
 }
 
 resource "aws_ecs_task_definition" "rest" {
-  family                   = "${var.project_name}-rest"
+  family                   = "${local.sanitized_name}-rest"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -204,7 +204,7 @@ resource "aws_service_discovery_service" "realtime" {
 }
 
 resource "aws_ecs_task_definition" "realtime" {
-  family                   = "${var.project_name}-realtime"
+  family                   = "${local.sanitized_name}-realtime"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -323,7 +323,7 @@ resource "aws_service_discovery_service" "imgproxy" {
 }
 
 resource "aws_ecs_task_definition" "storage" {
-  family                   = "${var.project_name}-storage"
+  family                   = "${local.sanitized_name}-storage"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 512
@@ -399,7 +399,7 @@ resource "aws_ecs_task_definition" "storage" {
 }
 
 resource "aws_ecs_task_definition" "imgproxy" {
-  family                   = "${var.project_name}-imgproxy"
+  family                   = "${local.sanitized_name}-imgproxy"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 512

@@ -1,9 +1,9 @@
 resource "aws_efs_file_system" "main" {
-  creation_token = "${var.project_name}-efs"
+  creation_token = "${local.sanitized_name}-efs"
   encrypted      = true
 
   tags = {
-    Name = "${var.project_name}-efs"
+    Name = "${local.sanitized_name}-efs"
   }
 }
 
@@ -32,7 +32,7 @@ resource "aws_efs_access_point" "db" {
   }
 
   tags = {
-    Name = "${var.project_name}-db-ap"
+    Name = "${local.sanitized_name}-db-ap"
   }
 }
 
@@ -52,7 +52,7 @@ resource "aws_efs_access_point" "storage" {
   }
 
   tags = {
-    Name = "${var.project_name}-storage-ap"
+    Name = "${local.sanitized_name}-storage-ap"
   }
 }
 
@@ -72,7 +72,7 @@ resource "aws_efs_access_point" "functions" {
   }
 
   tags = {
-    Name = "${var.project_name}-functions-ap"
+    Name = "${local.sanitized_name}-functions-ap"
   }
 }
 
@@ -92,6 +92,6 @@ resource "aws_efs_access_point" "config" {
   }
 
   tags = {
-    Name = "${var.project_name}-config-ap"
+    Name = "${local.sanitized_name}-config-ap"
   }
 }

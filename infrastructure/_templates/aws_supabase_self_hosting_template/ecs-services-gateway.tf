@@ -36,7 +36,7 @@ resource "aws_service_discovery_service" "kong" {
 }
 
 resource "aws_ecs_task_definition" "kong" {
-  family                   = "${var.project_name}-kong"
+  family                   = "${local.sanitized_name}-kong"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 512
@@ -140,7 +140,7 @@ resource "aws_service_discovery_service" "studio" {
 }
 
 resource "aws_ecs_task_definition" "studio" {
-  family                   = "${var.project_name}-studio"
+  family                   = "${local.sanitized_name}-studio"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -229,7 +229,7 @@ resource "aws_service_discovery_service" "meta" {
 }
 
 resource "aws_ecs_task_definition" "meta" {
-  family                   = "${var.project_name}-meta"
+  family                   = "${local.sanitized_name}-meta"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -301,7 +301,7 @@ resource "aws_service_discovery_service" "analytics" {
 }
 
 resource "aws_ecs_task_definition" "analytics" {
-  family                   = "${var.project_name}-analytics"
+  family                   = "${local.sanitized_name}-analytics"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -386,7 +386,7 @@ resource "aws_service_discovery_service" "functions" {
 }
 
 resource "aws_ecs_task_definition" "functions" {
-  family                   = "${var.project_name}-functions"
+  family                   = "${local.sanitized_name}-functions"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -480,7 +480,7 @@ resource "aws_service_discovery_service" "supavisor" {
 }
 
 resource "aws_ecs_task_definition" "supavisor" {
-  family                   = "${var.project_name}-supavisor"
+  family                   = "${local.sanitized_name}-supavisor"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256

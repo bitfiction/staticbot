@@ -28,7 +28,7 @@ resource "aws_service_discovery_service" "db" {
 }
 
 resource "aws_ecs_task_definition" "db" {
-  family                   = "${var.project_name}-db"
+  family                   = "${local.sanitized_name}-db"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 1024
@@ -152,7 +152,7 @@ resource "aws_service_discovery_service" "vector" {
 }
 
 resource "aws_ecs_task_definition" "vector" {
-  family                   = "${var.project_name}-vector"
+  family                   = "${local.sanitized_name}-vector"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
