@@ -191,7 +191,7 @@ resource "aws_security_group" "efs" {
 # --- ALB ---
 
 resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb"
+  name               = "${local.short_name}-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
@@ -215,7 +215,7 @@ resource "aws_lb_listener" "http" {
 
 # Target Group for Kong (The main gateway)
 resource "aws_lb_target_group" "kong" {
-  name        = "${var.project_name}-kong-tg"
+  name        = "${local.short_name}-kong-tg"
   port        = 8000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
@@ -233,7 +233,7 @@ resource "aws_lb_target_group" "kong" {
 
 # Target Group for Studio (UI) - Optional, might want to route via Kong or separate listener
 resource "aws_lb_target_group" "studio" {
-  name        = "${var.project_name}-studio-tg"
+  name        = "${local.short_name}-studio-tg"
   port        = 3000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id

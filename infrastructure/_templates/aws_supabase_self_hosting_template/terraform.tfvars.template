@@ -1,5 +1,7 @@
-aws_region   = "<target_region>"
-project_name = "<account_name>"
+aws_region         = "<target_region>"
+terraform_role_arn = "<target_role_arn>"
+external_id        = "<external_id>"
+project_name       = "<account_name>"
 
 # Database Secrets
 postgres_password  = "<postgres_password>"

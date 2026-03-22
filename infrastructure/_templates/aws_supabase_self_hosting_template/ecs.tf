@@ -16,7 +16,7 @@ resource "aws_service_discovery_private_dns_namespace" "main" {
 # --- IAM Roles ---
 
 resource "aws_iam_role" "execution_role" {
-  name = "${var.project_name}-execution-role"
+  name = "${local.iam_name}-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -38,7 +38,7 @@ resource "aws_iam_role_policy_attachment" "execution_role_policy" {
 }
 
 resource "aws_iam_role" "task_role" {
-  name = "${var.project_name}-task-role"
+  name = "${local.iam_name}-task-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -56,7 +56,7 @@ resource "aws_iam_role" "task_role" {
 
 # Allow tasks to execute commands (optional, good for debugging)
 resource "aws_iam_role_policy" "ecs_exec" {
-  name = "${var.project_name}-ecs-exec-policy"
+  name = "${local.iam_name}-ecs-exec-policy"
   role = aws_iam_role.task_role.id
 
   policy = jsonencode({

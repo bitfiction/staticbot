@@ -4,6 +4,16 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "terraform_role_arn" {
+  description = "ARN of the IAM role to assume for resource operations"
+  type        = string
+}
+
+variable "external_id" {
+  description = "External ID for cross-account role assumption"
+  type        = string
+}
+
 variable "project_name" {
   description = "Project name for tagging and naming resources"
   type        = string
