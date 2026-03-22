@@ -22,6 +22,8 @@ resource "aws_ecs_service" "kong" {
   service_registries {
     registry_arn = aws_service_discovery_service.kong.arn
   }
+
+  depends_on = [aws_lb_listener.http]
 }
 
 resource "aws_service_discovery_service" "kong" {
@@ -126,6 +128,8 @@ resource "aws_ecs_service" "studio" {
   service_registries {
     registry_arn = aws_service_discovery_service.studio.arn
   }
+
+  depends_on = [aws_lb_listener_rule.studio]
 }
 
 resource "aws_service_discovery_service" "studio" {
