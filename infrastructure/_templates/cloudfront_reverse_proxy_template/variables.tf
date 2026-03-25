@@ -52,7 +52,33 @@ variable "custom_domain" {
 }
 
 variable "hosted_zone_id" {
-  description = "Route53 Hosted Zone ID for the custom domain. Required when custom_domain is set."
+  description = "Route53 Hosted Zone ID for the custom domain. Required when custom_domain is set and use_existing_hosted_zone is false."
+  type        = string
+  default     = ""
+}
+
+# --- Reuse existing resources (when deploying into an account that already hosts websites) ---
+
+variable "use_existing_hosted_zone" {
+  description = "If true, look up an existing Route53 hosted zone instead of requiring hosted_zone_id. The zone is looked up by the parent domain of custom_domain."
+  type        = bool
+  default     = false
+}
+
+variable "use_existing_hosted_zone_id" {
+  description = "Explicit hosted zone ID to use when use_existing_hosted_zone is true. If empty, the zone is looked up by domain name."
+  type        = string
+  default     = ""
+}
+
+variable "use_existing_certificate" {
+  description = "If true, look up an existing ACM certificate instead of creating a new one."
+  type        = bool
+  default     = false
+}
+
+variable "use_existing_certificate_domain" {
+  description = "Domain to look up the existing certificate for (e.g. '*.example.com' or 'example.com'). Required when use_existing_certificate is true."
   type        = string
   default     = ""
 }

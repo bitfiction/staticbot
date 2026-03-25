@@ -40,14 +40,60 @@ locals {
   )
 
   has_custom_domain = var.custom_domain != ""
+
+  # Derive the parent domain for hosted zone lookup (e.g. "events.example.com" → "example.com")
+  domain_parts      = local.has_custom_domain ? split(".", var.custom_domain) : []
+  parent_domain     = local.has_custom_domain && length(local.domain_parts) > 2 ? join(".", slice(local.domain_parts, 1, length(local.domain_parts))) : var.custom_domain
+
+  # Resolved zone ID — from existing data source, explicit var, or newly created (not applicable here, proxy uses existing or provided)
+  resolved_zone_id = local.has_custom_domain ? (
+    var.use_existing_hosted_zone && var.use_existing_hosted_zone_id != ""
+      ? data.aws_route53_zone.existing_by_id[0].zone_id
+      : var.use_existing_hosted_zone
+        ? data.aws_route53_zone.existing_by_name[0].zone_id
+        : var.hosted_zone_id
+  ) : ""
+
+  # Resolved certificate ARN — from existing data source or newly created
+  create_certificate = local.has_custom_domain && !var.use_existing_certificate
+  resolved_certificate_arn = local.has_custom_domain ? (
+    var.use_existing_certificate
+      ? data.aws_acm_certificate.existing[0].arn
+      : aws_acm_certificate_validation.proxy[0].certificate_arn
+  ) : ""
 }
 
 # ---------------------------------------------------------------------------
-# ACM Certificate (only when custom_domain is set)
+# Look up existing Route53 Hosted Zone (when use_existing_hosted_zone is true)
+# ---------------------------------------------------------------------------
+
+data "aws_route53_zone" "existing_by_id" {
+  count   = var.use_existing_hosted_zone && var.use_existing_hosted_zone_id != "" ? 1 : 0
+  zone_id = var.use_existing_hosted_zone_id
+}
+
+data "aws_route53_zone" "existing_by_name" {
+  count = var.use_existing_hosted_zone && var.use_existing_hosted_zone_id == "" ? 1 : 0
+  name  = local.parent_domain
+}
+
+# ---------------------------------------------------------------------------
+# Look up existing ACM Certificate (when use_existing_certificate is true)
+# ---------------------------------------------------------------------------
+
+data "aws_acm_certificate" "existing" {
+  count       = var.use_existing_certificate && local.has_custom_domain ? 1 : 0
+  domain      = var.use_existing_certificate_domain
+  most_recent = true
+  statuses    = ["ISSUED"]
+}
+
+# ---------------------------------------------------------------------------
+# ACM Certificate (only when custom_domain is set and NOT reusing existing)
 # ---------------------------------------------------------------------------
 
 resource "aws_acm_certificate" "proxy" {
-  count             = local.has_custom_domain ? 1 : 0
+  count             = local.create_certificate ? 1 : 0
   domain_name       = var.custom_domain
   validation_method = "DNS"
 
@@ -57,7 +103,7 @@ resource "aws_acm_certificate" "proxy" {
 }
 
 resource "aws_route53_record" "cert_validation" {
-  for_each = local.has_custom_domain ? {
+  for_each = local.create_certificate ? {
     for dvo in aws_acm_certificate.proxy[0].domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
       record = dvo.resource_record_value
@@ -65,15 +111,16 @@ resource "aws_route53_record" "cert_validation" {
     }
   } : {}
 
-  zone_id = var.hosted_zone_id
-  name    = each.value.name
-  type    = each.value.type
-  records = [each.value.record]
-  ttl     = 60
+  zone_id         = local.resolved_zone_id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
+  allow_overwrite = true
 }
 
 resource "aws_acm_certificate_validation" "proxy" {
-  count                   = local.has_custom_domain ? 1 : 0
+  count                   = local.create_certificate ? 1 : 0
   certificate_arn         = aws_acm_certificate.proxy[0].arn
   validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
 }
@@ -84,7 +131,7 @@ resource "aws_acm_certificate_validation" "proxy" {
 
 resource "aws_route53_record" "proxy_alias" {
   count   = local.has_custom_domain ? 1 : 0
-  zone_id = var.hosted_zone_id
+  zone_id = local.resolved_zone_id
   name    = var.custom_domain
   type    = "A"
 
@@ -110,10 +157,9 @@ resource "aws_cloudfront_cache_policy" "proxy" {
       cookie_behavior = "all"
     }
     headers_config {
-      header_behavior = "whitelist"
-      headers {
-        items = ["Origin", "Authorization"]
-      }
+      # With caching disabled (max_ttl=0), header_behavior must be "none".
+      # Headers are still forwarded to the origin via the origin request policy.
+      header_behavior = "none"
     }
     query_strings_config {
       query_string_behavior = "all"
@@ -156,7 +202,9 @@ resource "aws_cloudfront_response_headers_policy" "proxy" {
     access_control_allow_credentials = true
 
     access_control_allow_headers {
-      items = ["*"]
+      # Wildcard "*" is not allowed when allow_credentials is true (CORS spec).
+      # List the specific headers needed by PostHog and general API usage.
+      items = ["Authorization", "Content-Type", "Origin", "Accept", "X-Requested-With", "Cache-Control"]
     }
     access_control_allow_methods {
       items = ["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"]
@@ -243,7 +291,7 @@ resource "aws_cloudfront_distribution" "proxy" {
 
   viewer_certificate {
     # Use ACM cert when custom domain is configured, otherwise default CloudFront cert
-    acm_certificate_arn            = local.has_custom_domain ? aws_acm_certificate_validation.proxy[0].certificate_arn : null
+    acm_certificate_arn            = local.has_custom_domain ? local.resolved_certificate_arn : null
     cloudfront_default_certificate = local.has_custom_domain ? false : true
     minimum_protocol_version       = local.has_custom_domain ? "TLSv1.2_2021" : "TLSv1"
     ssl_support_method             = local.has_custom_domain ? "sni-only" : null
