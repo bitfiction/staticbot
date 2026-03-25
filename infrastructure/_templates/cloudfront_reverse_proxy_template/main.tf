@@ -154,7 +154,9 @@ resource "aws_cloudfront_cache_policy" "proxy" {
 
   parameters_in_cache_key_and_forwarded_to_origin {
     cookies_config {
-      cookie_behavior = "all"
+      # With caching disabled (max_ttl=0), cookie_behavior must be "none".
+      # Cookies are still forwarded to the origin via the origin request policy.
+      cookie_behavior = "none"
     }
     headers_config {
       # With caching disabled (max_ttl=0), header_behavior must be "none".
@@ -162,11 +164,13 @@ resource "aws_cloudfront_cache_policy" "proxy" {
       header_behavior = "none"
     }
     query_strings_config {
-      query_string_behavior = "all"
+      # With caching disabled (max_ttl=0), query_string_behavior must be "none".
+      # Query strings are still forwarded to the origin via the origin request policy.
+      query_string_behavior = "none"
     }
 
-    enable_accept_encoding_brotli = true
-    enable_accept_encoding_gzip   = true
+    enable_accept_encoding_brotli = false
+    enable_accept_encoding_gzip   = false
   }
 }
 
