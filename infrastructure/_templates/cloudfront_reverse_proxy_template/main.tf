@@ -189,9 +189,17 @@ resource "aws_cloudfront_origin_request_policy" "proxy" {
     cookie_behavior = "all"
   }
   headers_config {
-    header_behavior = "allViewerAndWhitelistCloudFront"
+    # Do NOT use "allViewer" — it forwards Host: g.staticbot.dev to the origin,
+    # causing PostHog to return 404. CloudFront must send the origin's own Host header.
+    header_behavior = "whitelist"
     headers {
-      items = ["CloudFront-Viewer-Country"]
+      items = [
+        "Origin",
+        "Access-Control-Request-Headers",
+        "Access-Control-Request-Method",
+        "Referer",
+        "Accept-Language",
+      ]
     }
   }
   query_strings_config {
