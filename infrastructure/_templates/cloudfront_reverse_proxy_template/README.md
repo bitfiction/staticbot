@@ -188,4 +188,4 @@ Read more: [Deploy a PostHog Reverse Proxy on AWS CloudFront — The Easy Way](h
 
 ## License
 
-This template is part of the [Staticbot](https://github.com/bitfiction/staticbot) project and is open source.
+MIT License. See [LICENSE](../../LICENSE) for details.
