@@ -41,23 +41,27 @@ locals {
 
   has_custom_domain = var.custom_domain != ""
 
+  # Normalize string booleans from Python-generated tfvars ("True"/"true"/"false")
+  _use_existing_hosted_zone  = lower(var.use_existing_hosted_zone) == "true"
+  _use_existing_certificate  = lower(var.use_existing_certificate) == "true"
+
   # Derive the parent domain for hosted zone lookup (e.g. "events.example.com" → "example.com")
   domain_parts      = local.has_custom_domain ? split(".", var.custom_domain) : []
   parent_domain     = local.has_custom_domain && length(local.domain_parts) > 2 ? join(".", slice(local.domain_parts, 1, length(local.domain_parts))) : var.custom_domain
 
   # Resolved zone ID — from existing data source, explicit var, or newly created (not applicable here, proxy uses existing or provided)
   resolved_zone_id = local.has_custom_domain ? (
-    var.use_existing_hosted_zone && var.use_existing_hosted_zone_id != ""
+    local._use_existing_hosted_zone && var.use_existing_hosted_zone_id != ""
       ? data.aws_route53_zone.existing_by_id[0].zone_id
-      : var.use_existing_hosted_zone
+      : local._use_existing_hosted_zone
         ? data.aws_route53_zone.existing_by_name[0].zone_id
         : var.hosted_zone_id
   ) : ""
 
   # Resolved certificate ARN — from existing data source or newly created
-  create_certificate = local.has_custom_domain && !var.use_existing_certificate
+  create_certificate = local.has_custom_domain && !local._use_existing_certificate
   resolved_certificate_arn = local.has_custom_domain ? (
-    var.use_existing_certificate
+    local._use_existing_certificate
       ? data.aws_acm_certificate.existing[0].arn
       : aws_acm_certificate_validation.proxy[0].certificate_arn
   ) : ""
@@ -68,12 +72,12 @@ locals {
 # ---------------------------------------------------------------------------
 
 data "aws_route53_zone" "existing_by_id" {
-  count   = var.use_existing_hosted_zone && var.use_existing_hosted_zone_id != "" ? 1 : 0
+  count   = local._use_existing_hosted_zone && var.use_existing_hosted_zone_id != "" ? 1 : 0
   zone_id = var.use_existing_hosted_zone_id
 }
 
 data "aws_route53_zone" "existing_by_name" {
-  count = var.use_existing_hosted_zone && var.use_existing_hosted_zone_id == "" ? 1 : 0
+  count = local._use_existing_hosted_zone && var.use_existing_hosted_zone_id == "" ? 1 : 0
   name  = local.parent_domain
 }
 
@@ -82,7 +86,7 @@ data "aws_route53_zone" "existing_by_name" {
 # ---------------------------------------------------------------------------
 
 data "aws_acm_certificate" "existing" {
-  count       = var.use_existing_certificate && local.has_custom_domain ? 1 : 0
+  count       = local._use_existing_certificate && local.has_custom_domain ? 1 : 0
   domain      = var.use_existing_certificate_domain
   most_recent = true
   statuses    = ["ISSUED"]

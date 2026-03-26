@@ -60,9 +60,9 @@ variable "hosted_zone_id" {
 # --- Reuse existing resources (when deploying into an account that already hosts websites) ---
 
 variable "use_existing_hosted_zone" {
-  description = "If true, look up an existing Route53 hosted zone instead of requiring hosted_zone_id. The zone is looked up by the parent domain of custom_domain."
-  type        = bool
-  default     = false
+  description = "If true, look up an existing Route53 hosted zone instead of requiring hosted_zone_id. The zone is looked up by the parent domain of custom_domain. Accepts string 'true'/'True' or bool for compatibility with Python-generated tfvars."
+  type        = string
+  default     = "false"
 }
 
 variable "use_existing_hosted_zone_id" {
@@ -72,9 +72,9 @@ variable "use_existing_hosted_zone_id" {
 }
 
 variable "use_existing_certificate" {
-  description = "If true, look up an existing ACM certificate instead of creating a new one."
-  type        = bool
-  default     = false
+  description = "If true, look up an existing ACM certificate instead of creating a new one. Accepts string 'true'/'True' or bool for compatibility with Python-generated tfvars."
+  type        = string
+  default     = "false"
 }
 
 variable "use_existing_certificate_domain" {
