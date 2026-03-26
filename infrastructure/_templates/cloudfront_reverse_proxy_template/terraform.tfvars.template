@@ -5,22 +5,22 @@ terraform_role_arn = "<target_role_arn>"
 external_id        = "<external_id>"
 
 # --- Origin configuration ---
-# Set posthog_region to "us" or "eu" for PostHog defaults,
-# or override with explicit domains for any other service.
-posthog_region = "us"
-
-# api_origin_domain    = "us.i.posthog.com"
-# assets_origin_domain = "us-assets.i.posthog.com"
+posthog_region       = "<posthog_region>"
+api_origin_domain    = "<api_origin_domain>"
+assets_origin_domain = "<assets_origin_domain>"
 
 # --- Custom domain (optional) ---
-# custom_domain  = "proxy.example.com"
-# hosted_zone_id = "<hosted_zone_id>"
+custom_domain  = "<custom_domain>"
+hosted_zone_id = "<hosted_zone_id>"
 
-# --- CORS (optional) ---
-# cors_allow_origins = ["https://example.com"]
+# --- Reuse existing resources (set by pre-checks) ---
+use_existing_certificate        = <use_existing_certificate>
+use_existing_certificate_domain = "<use_existing_certificate_domain>"
+use_existing_hosted_zone        = <use_existing_hosted_zone>
+use_existing_hosted_zone_id     = "<use_existing_hosted_zone_id>"
 
 # --- Distribution settings ---
-# price_class = "PriceClass_100"
+price_class = "<price_class>"
 
 common_tags = {
   Project    = "<project_name>"
