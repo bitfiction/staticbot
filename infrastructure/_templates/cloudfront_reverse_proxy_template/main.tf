@@ -27,7 +27,7 @@ provider "aws" {
 }
 
 locals {
-  sanitized_name = replace(replace(var.project_name, "/--+/", "-"), "/-$/", "")
+  sanitized_name = replace(replace(replace(var.project_name, ".", "-"), "/--+/", "-"), "/-$/", "")
 
   # Resolve origin domains from region presets or direct overrides
   api_origin_domain = coalesce(
