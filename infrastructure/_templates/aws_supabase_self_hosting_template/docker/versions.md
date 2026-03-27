@@ -1,5 +1,19 @@
 # Docker Image Versions
 
+## 2026-03-27
+- kong/kong:3.9.1 (prev kong:2.8.1) — MAJOR UPGRADE: Kong 2→3, new entrypoint, post-function plugin
+- supabase/studio:2026.03.16-sha-5528817 (prev supabase/studio:2025.12.17-sha-43f4f7f)
+- supabase/gotrue:v2.186.0 (prev supabase/gotrue:v2.184.0)
+- postgrest/postgrest:v14.6 (prev postgrest/postgrest:v14.1)
+- supabase/realtime:v2.76.5 (prev supabase/realtime:v2.68.0)
+- supabase/storage-api:v1.44.2 (prev supabase/storage-api:v1.33.0)
+- supabase/edge-runtime:v1.71.2 (prev supabase/edge-runtime:v1.69.28)
+- darthsim/imgproxy:v3.30.1 (prev darthsim/imgproxy:v3.8.0)
+- supabase/logflare:1.31.2 (prev supabase/logflare:1.27.0)
+- supabase/postgres-meta:v0.95.2 (prev supabase/postgres-meta:v0.95.1)
+- timberio/vector:0.53.0-alpine (prev timberio/vector:0.28.1-alpine)
+- Config changes: PGRST JWKS support, storage PGRST_JWT_SECRET→AUTH_JWT_SECRET fix, new deno-cache volume, opaque API keys, snippets/edge-functions studio volumes, METRICS_JWT_SECRET for realtime
+
 ## 2025-12-18
 - supabase/studio:2025.12.17-sha-43f4f7f (prev supabase/studio:2025.12.09-sha-434634f)
 - supabase/gotrue:v2.184.0 (prev supabase/gotrue:v2.183.0)

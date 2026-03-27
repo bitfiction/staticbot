@@ -226,7 +226,7 @@ services:
             - anon
 
   ## Storage API endpoint (with Authorization header transformation).
-  ## No key-auth - S3 protocol requests don't carry an apikey header.
+  ## No key-auth — S3 protocol requests don't carry an apikey header.
   ##
   ## The request-transformer translates opaque API keys to asymmetric JWTs
   ## and passes through existing Authorization headers (user JWTs, AWS SigV4).
@@ -286,6 +286,31 @@ services:
     plugins:
       - name: cors
 
+  ## Analytics routes
+  ## Not used - Studio and Vector talk directly to analytics via Docker networking.
+  ## If external access is needed, add routes with key-auth matching Logflare's x-api-key auth.
+  # - name: analytics-v1-api
+  #   _comment: 'Analytics: /analytics/v1/api/endpoints/* -> http://logflare:4000/api/endpoints/*'
+  #   url: http://analytics:4000/api/endpoints
+  #   routes:
+  #     - name: analytics-v1-api
+  #       strip_path: true
+  #       paths:
+  #         - /analytics/v1/api/endpoints/
+  # - name: analytics-v1
+  #   _comment: 'Analytics: /analytics/v1/* -> http://logflare:4000/*'
+  #   url: http://analytics:4000/
+  #   routes:
+  #     - name: dashboard-v1-all
+  #       strip_path: true
+  #       paths:
+  #         - /analytics/v1
+  #   plugins:
+  #     - name: cors
+  #     - name: basic-auth
+  #       config:
+  #         hide_credentials: true
+
   ## Secure Database routes
   - name: meta
     _comment: 'pg-meta: /pg/* -> http://pg-meta:8080/*'
@@ -335,6 +360,17 @@ services:
         config:
           status_code: 403
           message: "Access is forbidden."
+      # Enable local access (danger zone!)
+      # 1. Comment out the 'request-termination' section above
+      # 2. Uncomment the entire section below, including 'deny'
+      # 3. Add your local IPs to the 'allow' list
+      #- name: cors
+      #- name: ip-restriction
+      #  config:
+      #    allow:
+      #      - 127.0.0.1
+      #      - ::1
+      #    deny: []
 
   ## Protected Dashboard - catch all remaining routes
   - name: dashboard
