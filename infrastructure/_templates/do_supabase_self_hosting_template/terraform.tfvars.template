@@ -1,0 +1,37 @@
+do_token     = "<do_token>"
+do_region    = "<do_region>"
+project_name = "<account_name>"
+
+# Domain & TLS
+domain_name       = "<domain_name>"
+letsencrypt_email = "<letsencrypt_email>"
+
+# Database Secrets
+postgres_password  = "<postgres_password>"
+pg_meta_crypto_key = "<pg_meta_crypto_key>"
+
+# Supabase Secrets
+anon_key         = "<anon_key>"
+service_role_key = "<service_role_key>"
+jwt_secret       = "<jwt_secret>"
+secret_key_base  = "<secret_key_base>"
+vault_enc_key    = "<vault_enc_key>"
+
+# Analytics (Logflare)
+logflare_public_access_token  = "<logflare_public_access_token>"
+logflare_private_access_token = "<logflare_private_access_token>"
+
+# Dashboard (Kong)
+dashboard_password = "<dashboard_password>"
+
+# URLs
+supabase_public_url = "<supabase_public_url>"
+api_external_url    = "<api_external_url>"
+site_url            = "<site_url>"
+
+# SMTP
+smtp_admin_email = "<smtp_admin_email>"
+smtp_host        = "<smtp_host>"
+smtp_port        = <smtp_port>
+smtp_user        = "<smtp_user>"
+smtp_pass        = "<smtp_pass>"
