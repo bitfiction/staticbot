@@ -13,24 +13,24 @@ resource "kubernetes_secret" "supabase_config" {
   }
 
   data = {
-    POSTGRES_PASSWORD              = var.postgres_password
-    JWT_SECRET                     = var.jwt_secret
-    ANON_KEY                       = var.anon_key
-    SERVICE_ROLE_KEY               = var.service_role_key
-    DASHBOARD_PASSWORD             = var.dashboard_password
-    PG_META_CRYPTO_KEY             = var.pg_meta_crypto_key
-    SECRET_KEY_BASE                = var.secret_key_base
-    VAULT_ENC_KEY                  = var.vault_enc_key
-    LOGFLARE_PUBLIC_ACCESS_TOKEN   = var.logflare_public_access_token
-    LOGFLARE_PRIVATE_ACCESS_TOKEN  = var.logflare_private_access_token
-    SUPABASE_PUBLISHABLE_KEY       = var.supabase_publishable_key
-    SUPABASE_SECRET_KEY            = var.supabase_secret_key
-    ANON_KEY_ASYMMETRIC            = var.anon_key_asymmetric
-    SERVICE_ROLE_KEY_ASYMMETRIC    = var.service_role_key_asymmetric
-    SMTP_PASS                      = var.smtp_pass != null ? var.smtp_pass : ""
-    S3_PROTOCOL_ACCESS_KEY_ID      = var.s3_protocol_access_key_id
-    S3_PROTOCOL_ACCESS_KEY_SECRET  = var.s3_protocol_access_key_secret
-    OPENAI_API_KEY                 = var.openai_api_key
+    POSTGRES_PASSWORD             = var.postgres_password
+    JWT_SECRET                    = var.jwt_secret
+    ANON_KEY                      = var.anon_key
+    SERVICE_ROLE_KEY              = var.service_role_key
+    DASHBOARD_PASSWORD            = var.dashboard_password
+    PG_META_CRYPTO_KEY            = var.pg_meta_crypto_key
+    SECRET_KEY_BASE               = var.secret_key_base
+    VAULT_ENC_KEY                 = var.vault_enc_key
+    LOGFLARE_PUBLIC_ACCESS_TOKEN  = var.logflare_public_access_token
+    LOGFLARE_PRIVATE_ACCESS_TOKEN = var.logflare_private_access_token
+    SUPABASE_PUBLISHABLE_KEY      = var.supabase_publishable_key
+    SUPABASE_SECRET_KEY           = var.supabase_secret_key
+    ANON_KEY_ASYMMETRIC           = var.anon_key_asymmetric
+    SERVICE_ROLE_KEY_ASYMMETRIC   = var.service_role_key_asymmetric
+    SMTP_PASS                     = var.smtp_pass != null ? var.smtp_pass : ""
+    S3_PROTOCOL_ACCESS_KEY_ID     = var.s3_protocol_access_key_id
+    S3_PROTOCOL_ACCESS_KEY_SECRET = var.s3_protocol_access_key_secret
+    OPENAI_API_KEY                = var.openai_api_key
   }
 }
 
@@ -85,5 +85,74 @@ resource "kubernetes_config_map" "pooler_config" {
 
   data = {
     "pooler.exs" = file("${path.module}/docker/volumes/pooler/pooler.exs")
+  }
+}
+
+# --- ConfigMap: Vector log aggregation config ---
+# Adapted for K8s: uses kubernetes_logs source instead of docker_logs.
+
+resource "kubernetes_config_map" "vector_config" {
+  metadata {
+    name      = "vector-config"
+    namespace = kubernetes_namespace.supabase.metadata[0].name
+  }
+
+  data = {
+    "vector.yml" = file("${path.module}/docker/volumes/logs/vector.yml")
+  }
+}
+
+# --- ConfigMap: Edge Functions default files ---
+# Mounted by init container to seed the functions PVC on first deploy.
+
+resource "kubernetes_config_map" "functions_init" {
+  metadata {
+    name      = "functions-init"
+    namespace = kubernetes_namespace.supabase.metadata[0].name
+  }
+
+  data = {
+    "main-index.ts"  = file("${path.module}/docker/volumes/functions/main/index.ts")
+    "hello-index.ts" = file("${path.module}/docker/volumes/functions/hello/index.ts")
+  }
+}
+
+# --- Vector RBAC ---
+# Vector needs K8s API access to discover pods and read their logs.
+
+resource "kubernetes_service_account" "vector" {
+  metadata {
+    name      = "vector"
+    namespace = kubernetes_namespace.supabase.metadata[0].name
+  }
+}
+
+resource "kubernetes_cluster_role" "vector" {
+  metadata {
+    name = "${local.sanitized_name}-vector"
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["pods", "namespaces", "nodes"]
+    verbs      = ["get", "list", "watch"]
+  }
+}
+
+resource "kubernetes_cluster_role_binding" "vector" {
+  metadata {
+    name = "${local.sanitized_name}-vector"
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.vector.metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account.vector.metadata[0].name
+    namespace = kubernetes_namespace.supabase.metadata[0].name
   }
 }

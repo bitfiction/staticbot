@@ -155,7 +155,7 @@ resource "aws_ecs_task_definition" "studio" {
   container_definitions = jsonencode([
     {
       name      = "studio"
-      image     = "supabase/studio:2026.03.16-sha-5528817"
+      image     = "supabase/studio:2026.04.08-sha-205cbe7"
       essential = true
       portMappings = [
         {
@@ -164,7 +164,7 @@ resource "aws_ecs_task_definition" "studio" {
         }
       ]
       environment = [
-        { name = "HOSTNAME", value = "::" },
+        { name = "HOSTNAME", value = "0.0.0.0" },
         { name = "STUDIO_PG_META_URL", value = "http://meta.supabase.internal:8080" },
         { name = "POSTGRES_PORT", value = tostring(var.postgres_port) },
         { name = "POSTGRES_HOST", value = "db.supabase.internal" },
@@ -244,7 +244,7 @@ resource "aws_ecs_task_definition" "meta" {
   container_definitions = jsonencode([
     {
       name      = "meta"
-      image     = "supabase/postgres-meta:v0.95.2"
+      image     = "supabase/postgres-meta:v0.96.3"
       essential = true
       portMappings = [
         {
@@ -316,7 +316,7 @@ resource "aws_ecs_task_definition" "analytics" {
   container_definitions = jsonencode([
     {
       name      = "analytics"
-      image     = "supabase/logflare:1.31.2"
+      image     = "supabase/logflare:1.36.1"
       essential = true
       portMappings = [
         {

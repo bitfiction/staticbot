@@ -1,0 +1,12 @@
+# Local backend override for testing.
+# Copy this file to backend_override.tf to use local state instead of DO Spaces.
+#
+#   cp backend_override.tf.local backend_override.tf
+#
+# This overrides the S3 backend in backend.tf with a local file backend.
+
+terraform {
+  backend "local" {
+    path = "terraform.tfstate"
+  }
+}

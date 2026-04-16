@@ -1,0 +1,42 @@
+# Example values for local testing.
+# Copy to terraform.tfvars and fill in real values.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+
+do_token     = "dop_v1_your_digitalocean_api_token"
+do_region    = "fra1"
+project_name = "supabase-test"
+
+# Domain & TLS
+domain_name       = "supabase.example.com"
+letsencrypt_email = "you@example.com"
+
+# Database Secrets
+postgres_password  = "your-postgres-password"
+pg_meta_crypto_key = "your-meta-crypto-key"
+
+# Supabase Keys (generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+anon_key         = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
+service_role_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU"
+jwt_secret       = "super-secret-jwt-token-with-at-least-32-characters-long"
+secret_key_base  = "UpNVntn3cDxHJpq99YMc05T1cDR4cUbKS76FBggwTkfyS1mSconfgCCaGQQdt330yrBiJrb5NLy8JTx6HNKNjA=="
+vault_enc_key    = "your-vault-enc-key-must-be-32-ch"
+
+# Analytics (Logflare)
+logflare_public_access_token  = "your-logflare-public-token"
+logflare_private_access_token = "your-logflare-private-token"
+
+# Dashboard (Kong)
+dashboard_password = "your-dashboard-password"
+
+# URLs (update after deployment with the real domain/IP)
+supabase_public_url = "https://supabase.example.com"
+api_external_url    = "https://supabase.example.com"
+site_url            = "https://your-app.example.com"
+
+# SMTP
+smtp_admin_email = "admin@example.com"
+smtp_host        = "smtp.sendgrid.net"
+smtp_port        = 587
+smtp_user        = "apikey"
+smtp_pass        = "your-smtp-password"

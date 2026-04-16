@@ -167,9 +167,8 @@ resource "kubernetes_service" "db" {
 }
 
 # --- Vector (Log Processing) ---
-# Simplified for K8s — collects logs from containers and routes to analytics.
-# In K8s, containers log to stdout and logs are available via kubectl logs.
-# Vector here primarily serves as the log forwarder to the analytics (Logflare) service.
+# Collects logs from Supabase pods via K8s log files and forwards to analytics (Logflare).
+# Uses kubernetes_logs source which reads from /var/log/pods on the host node.
 
 resource "kubernetes_deployment" "vector" {
   metadata {
@@ -190,9 +189,13 @@ resource "kubernetes_deployment" "vector" {
       }
 
       spec {
+        service_account_name = kubernetes_service_account.vector.metadata[0].name
+
         container {
           name  = "vector"
           image = "timberio/vector:0.53.0-alpine"
+
+          args = ["--config", "/etc/vector/vector.yml"]
 
           env {
             name = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
@@ -202,6 +205,23 @@ resource "kubernetes_deployment" "vector" {
                 key  = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
               }
             }
+          }
+
+          volume_mount {
+            name       = "vector-config"
+            mount_path = "/etc/vector"
+            read_only  = true
+          }
+
+          volume_mount {
+            name       = "pod-logs"
+            mount_path = "/var/log/pods"
+            read_only  = true
+          }
+
+          volume_mount {
+            name       = "vector-data"
+            mount_path = "/var/lib/vector"
           }
 
           liveness_probe {
@@ -225,6 +245,26 @@ resource "kubernetes_deployment" "vector" {
               memory = "256Mi"
             }
           }
+        }
+
+        volume {
+          name = "vector-config"
+          config_map {
+            name = kubernetes_config_map.vector_config.metadata[0].name
+          }
+        }
+
+        volume {
+          name = "pod-logs"
+          host_path {
+            path = "/var/log/pods"
+            type = "Directory"
+          }
+        }
+
+        volume {
+          name = "vector-data"
+          empty_dir {}
         }
       }
     }

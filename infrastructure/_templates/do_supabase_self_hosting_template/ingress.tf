@@ -97,12 +97,12 @@ resource "kubernetes_ingress_v1" "supabase" {
     namespace = kubernetes_namespace.supabase.metadata[0].name
     annotations = {
       "cert-manager.io/cluster-issuer"                 = "letsencrypt-prod"
-      "nginx.ingress.kubernetes.io/proxy-body-size"     = "50m"
-      "nginx.ingress.kubernetes.io/proxy-read-timeout"  = "150"
-      "nginx.ingress.kubernetes.io/proxy-send-timeout"  = "150"
+      "nginx.ingress.kubernetes.io/proxy-body-size"    = "50m"
+      "nginx.ingress.kubernetes.io/proxy-read-timeout" = "150"
+      "nginx.ingress.kubernetes.io/proxy-send-timeout" = "150"
       # WebSocket support for Realtime
-      "nginx.ingress.kubernetes.io/proxy-http-version"  = "1.1"
-      "nginx.ingress.kubernetes.io/upstream-hash-by"    = "$remote_addr"
+      "nginx.ingress.kubernetes.io/proxy-http-version" = "1.1"
+      "nginx.ingress.kubernetes.io/upstream-hash-by"   = "$remote_addr"
     }
   }
 

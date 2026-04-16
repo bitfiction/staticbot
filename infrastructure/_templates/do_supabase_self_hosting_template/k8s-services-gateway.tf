@@ -222,7 +222,7 @@ resource "kubernetes_deployment" "studio" {
       spec {
         container {
           name  = "studio"
-          image = "supabase/studio:2026.03.16-sha-5528817"
+          image = "supabase/studio:2026.04.08-sha-205cbe7"
 
           port {
             container_port = 3000
@@ -231,7 +231,7 @@ resource "kubernetes_deployment" "studio" {
 
           env {
             name  = "HOSTNAME"
-            value = "::"
+            value = "0.0.0.0"
           }
           env {
             name  = "STUDIO_PG_META_URL"
@@ -425,7 +425,7 @@ resource "kubernetes_deployment" "meta" {
       spec {
         container {
           name  = "meta"
-          image = "supabase/postgres-meta:v0.95.2"
+          image = "supabase/postgres-meta:v0.96.3"
 
           port {
             container_port = 8080
@@ -525,7 +525,7 @@ resource "kubernetes_deployment" "analytics" {
       spec {
         container {
           name  = "analytics"
-          image = "supabase/logflare:1.31.2"
+          image = "supabase/logflare:1.36.1"
 
           port {
             container_port = 4000
@@ -670,6 +670,27 @@ resource "kubernetes_deployment" "functions" {
       }
 
       spec {
+        # Init container seeds the PVC with default edge functions on first deploy.
+        # Uses cp -n (no-clobber) so user-deployed functions are never overwritten.
+        init_container {
+          name  = "init-functions"
+          image = "busybox:1.36"
+          command = [
+            "sh", "-c",
+            "mkdir -p /functions/main /functions/hello && cp -n /init/main-index.ts /functions/main/index.ts 2>/dev/null; cp -n /init/hello-index.ts /functions/hello/index.ts 2>/dev/null; true"
+          ]
+
+          volume_mount {
+            name       = "functions-data"
+            mount_path = "/functions"
+          }
+          volume_mount {
+            name       = "functions-init"
+            mount_path = "/init"
+            read_only  = true
+          }
+        }
+
         container {
           name    = "functions"
           image   = "supabase/edge-runtime:v1.71.2"
@@ -763,6 +784,13 @@ resource "kubernetes_deployment" "functions" {
           name = "functions-data"
           persistent_volume_claim {
             claim_name = kubernetes_persistent_volume_claim.functions_data.metadata[0].name
+          }
+        }
+
+        volume {
+          name = "functions-init"
+          config_map {
+            name = kubernetes_config_map.functions_init.metadata[0].name
           }
         }
       }

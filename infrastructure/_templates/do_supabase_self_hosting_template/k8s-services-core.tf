@@ -216,7 +216,7 @@ resource "kubernetes_deployment" "rest" {
       spec {
         container {
           name    = "rest"
-          image   = "postgrest/postgrest:v14.6"
+          image   = "postgrest/postgrest:v14.8"
           command = ["postgrest"]
 
           port {
@@ -498,7 +498,7 @@ resource "kubernetes_deployment" "storage" {
         # Storage API container
         container {
           name  = "storage"
-          image = "supabase/storage-api:v1.44.2"
+          image = "supabase/storage-api:v1.48.26"
 
           port {
             container_port = 5000

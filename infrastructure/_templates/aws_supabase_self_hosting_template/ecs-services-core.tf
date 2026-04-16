@@ -140,7 +140,7 @@ resource "aws_ecs_task_definition" "rest" {
   container_definitions = jsonencode([
     {
       name      = "rest"
-      image     = "postgrest/postgrest:v14.6"
+      image     = "postgrest/postgrest:v14.8"
       essential = true
       portMappings = [
         {
@@ -346,7 +346,7 @@ resource "aws_ecs_task_definition" "storage" {
   container_definitions = jsonencode([
     {
       name      = "storage"
-      image     = "supabase/storage-api:v1.44.2"
+      image     = "supabase/storage-api:v1.48.26"
       essential = true
       portMappings = [
         {
