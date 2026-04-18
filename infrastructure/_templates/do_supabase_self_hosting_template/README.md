@@ -92,3 +92,54 @@ tofu init -backend-config=backend.hcl
 | `ingress.tf` | nginx-ingress, cert-manager, Ingress rules |
 | `outputs.tf` | Cluster endpoint, URLs, LB IP |
 | `docker/` | Shared config files (kong.yml, SQL init scripts, vector.yml, pooler.exs, edge functions) |
+
+## Upstream Sync
+
+All Supabase image versions and config files come from the upstream `supabase/supabase` repo (`docker/` directory). A sync script keeps all 4 templates in sync at once:
+
+- **DO Single-Tenant** (this template)
+- **AWS Single-Tenant** (`aws_supabase_self_hosting_template/`)
+- **Multi-Tenant Shared** (`staticbot-control-center/infra/digitalocean/modules-tenants/shared/`)
+- **Multi-Tenant Per-Tenant** (`do_supabase_multi_tenant_tenant/`)
+
+### Monthly Sync Workflow
+
+```bash
+# 1. Pull latest upstream
+cd ~/Dev/Workspaces/staticbot/supabase/supabase && git pull
+
+# 2. See what changed
+cd ~/Dev/Workspaces/staticbot/staticbot
+python scripts/supabase-sync.py detect
+
+# 3. Auto-apply safe image bumps (all 4 templates at once)
+python scripts/supabase-sync.py apply --safe
+
+# 4. Review any TIER 2+ changes flagged by detect (env vars, config files, etc.)
+#    These need manual review — the detect output tells you what and where.
+
+# 5. Generate versions.md changelog entry
+python scripts/supabase-sync.py report
+
+# 6. Validate
+cd infrastructure/_templates/do_supabase_self_hosting_template && tofu validate
+cd ../aws_supabase_self_hosting_template && tofu validate
+
+# 7. Commit
+cd ~/Dev/Workspaces/staticbot/staticbot
+git add -A && git commit -m "chore: sync Supabase upstream YYYY-MM-DD"
+# Also commit any changes in staticbot-control-center if MT shared was updated
+```
+
+### Risk Tiers
+
+| Tier | What | Action |
+|------|------|--------|
+| 1 — Auto-safe | Image tag bumps | `apply --safe` handles it |
+| 2 — Review-light | New optional env vars, minor config changes | Quick glance, then apply manually |
+| 3 — Review-required | New mandatory env vars, kong.yml changes, SQL init changes | Human review + testing |
+| 4 — Breaking | New services, Postgres upgrade, Kong→Envoy | Planning needed |
+
+### Version History
+
+See `docker/versions.md` for the full changelog of image version updates.
