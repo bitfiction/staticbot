@@ -27,7 +27,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 WORKSPACE = Path.home() / "Dev" / "Workspaces" / "staticbot"
-UPSTREAM = WORKSPACE / "supabase" / "supabase" / "docker"
+UPSTREAM = Path.home() / "Dev" / "Workspaces" / "supabot" / "supabase" / "docker"
 
 # Service name → image prefix (used for matching in both docker-compose and TF)
 SERVICE_IMAGES = {
@@ -117,6 +117,13 @@ TEMPLATES = {
 
 # Volume directories to diff (relative to docker/)
 VOLUME_DIRS = ["volumes/db", "volumes/api", "volumes/pooler", "volumes/logs", "volumes/functions"]
+
+# Paths under docker/ we deliberately don't sync from upstream. Suppressed from
+# TIER 3 output so unimportant drift doesn't drown out real review items.
+# Keyed by path relative to UPSTREAM (docker/), value is the reason.
+IGNORED_VOLUME_PATHS: dict[str, str] = {
+    "volumes/db/init": "Legacy dir; data.sql is empty and not mounted by upstream docker-compose.yml",
+}
 
 # ---------------------------------------------------------------------------
 # Parsing helpers
@@ -211,42 +218,108 @@ def detect_image_changes() -> list[dict]:
     return changes
 
 
-def detect_volume_diffs() -> list[dict]:
-    """Detect differences in volume files between upstream and templates."""
-    diffs = []
+def _parse_diff_line(line: str) -> dict | None:
+    """Parse one `diff -rq` output line into a structured entry."""
+    m = re.match(r"^Files (.+) and (.+) differ$", line)
+    if m:
+        upstream_file = Path(m.group(1))
+        try:
+            rel = str(upstream_file.relative_to(UPSTREAM))
+        except ValueError:
+            rel = str(upstream_file)
+        return {"kind": "differ", "rel_path": rel}
+
+    m = re.match(r"^Only in (.+): (.+)$", line)
+    if m:
+        dir_path = Path(m.group(1))
+        name = m.group(2)
+        try:
+            rel_dir = str(dir_path.relative_to(UPSTREAM))
+            return {"kind": "only_upstream", "rel_path": f"{rel_dir}/{name}"}
+        except ValueError:
+            return {"kind": "only_template", "rel_path": name}
+    return None
+
+
+def _matches_ignore(rel_path: str) -> str | None:
+    """Return the ignore reason if rel_path is suppressed, else None."""
+    for ignored_path, reason in IGNORED_VOLUME_PATHS.items():
+        if rel_path == ignored_path or rel_path.startswith(ignored_path + "/"):
+            return reason
+    return None
+
+
+def get_upstream_commits(rel_path: str, limit: int = 3) -> list[str]:
+    """Return the most recent upstream commits touching docker/<rel_path>.
+
+    Dates are included so the caller can tell at-a-glance whether the drift is
+    recent or carried over from a sync gap that predates the last versions.md
+    bump. We deliberately don't filter by `--since`: the diff itself proves the
+    template is behind, and the *why* is whatever last touched the file upstream.
+    """
+    repo_root = UPSTREAM.parent
+    cmd = [
+        "git", "-C", str(repo_root), "log",
+        f"-{limit}", "--no-merges",
+        "--pretty=format:%h %ad %s", "--date=short",
+        "--", f"docker/{rel_path}",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return []
+    return [l for l in result.stdout.splitlines() if l.strip()]
+
+
+def detect_volume_diffs() -> tuple[list[dict], list[dict]]:
+    """Detect volume-file differences between upstream and templates.
+
+    Returns (diffs, ignored). `ignored` holds entries matched by IGNORED_VOLUME_PATHS
+    so the caller can show them under a separate "suppressed" section.
+    """
+    diffs: list[dict] = []
+    ignored: list[dict] = []
 
     for vol_dir in VOLUME_DIRS:
         upstream_dir = UPSTREAM / vol_dir
 
         for tmpl_key, tmpl in TEMPLATES.items():
-            if tmpl["docker_copy"]:
-                tmpl_dir = tmpl["base"] / "docker" / vol_dir
-            else:
-                # Multi-tenant templates may have volume files differently
-                # Check if the dir exists under the template base
-                tmpl_dir = tmpl["base"] / "docker" / vol_dir
-                if not tmpl_dir.exists():
-                    continue
-
+            tmpl_dir = tmpl["base"] / "docker" / vol_dir
             if not upstream_dir.exists() or not tmpl_dir.exists():
                 continue
 
-            # Run diff
             result = subprocess.run(
                 ["diff", "-rq", str(upstream_dir), str(tmpl_dir)],
                 capture_output=True, text=True
             )
+            if result.returncode == 0 or not result.stdout.strip():
+                continue
 
-            if result.returncode != 0 and result.stdout.strip():
-                diffs.append({
+            for line in result.stdout.splitlines():
+                entry = _parse_diff_line(line)
+                if not entry:
+                    continue
+                entry.update({
                     "volume": vol_dir,
                     "template": tmpl_key,
                     "template_label": tmpl["label"],
-                    "diff_summary": result.stdout.strip(),
                     "tier": 3,
                 })
 
-    return diffs
+                reason = (
+                    _matches_ignore(entry["rel_path"])
+                    if entry["kind"] != "only_template"
+                    else None
+                )
+                if reason:
+                    entry["reason"] = reason
+                    ignored.append(entry)
+                    continue
+
+                if entry["kind"] == "differ":
+                    entry["commits"] = get_upstream_commits(entry["rel_path"])
+                diffs.append(entry)
+
+    return diffs, ignored
 
 
 def detect_env_changes() -> list[dict]:
@@ -300,11 +373,11 @@ def detect_env_changes() -> list[dict]:
 
 def run_detect(as_json: bool = False):
     """Run full detection and print report."""
-    image_changes = detect_image_changes()
-    volume_diffs = detect_volume_diffs()
-    env_changes = detect_env_changes()
-
     last_sync = get_last_sync_date() or "unknown"
+
+    image_changes = detect_image_changes()
+    volume_diffs, ignored_diffs = detect_volume_diffs()
+    env_changes = detect_env_changes()
 
     if as_json:
         print(json.dumps({
@@ -312,6 +385,7 @@ def run_detect(as_json: bool = False):
             "date": str(date.today()),
             "image_changes": image_changes,
             "volume_diffs": volume_diffs,
+            "ignored_volume_diffs": ignored_diffs,
             "env_changes": env_changes,
         }, indent=2))
         return
@@ -348,10 +422,41 @@ def run_detect(as_json: bool = False):
 
     if volume_diffs:
         print("TIER 3 (review-required) — volume file differences:")
+        # Group by (kind, rel_path) so we explain each change once and list templates.
+        grouped: dict[tuple[str, str], dict] = {}
         for d in volume_diffs:
-            print(f"  {d['volume']} ({d['template_label']}):")
-            for line in d["diff_summary"].splitlines():
-                print(f"    {line}")
+            key = (d["kind"], d["rel_path"])
+            if key not in grouped:
+                grouped[key] = {**d, "templates": []}
+            grouped[key]["templates"].append(d["template_label"])
+
+        for (kind, path), info in sorted(grouped.items()):
+            marker = {"differ": "~", "only_upstream": "+", "only_template": "-"}[kind]
+            label = {
+                "differ": "modified upstream",
+                "only_upstream": "new in upstream",
+                "only_template": "template-only (not in upstream)",
+            }[kind]
+            print(f"  {marker} {path}  [{label}]")
+            print(f"    Templates: {', '.join(info['templates'])}")
+            commits = info.get("commits") or []
+            if kind == "differ":
+                if commits:
+                    print(f"    Recent upstream commits (last sync: {last_sync}):")
+                    for c in commits:
+                        print(f"      {c}")
+                else:
+                    print(f"    (no upstream history found for this file)")
+        print()
+
+    if ignored_diffs:
+        # Collapse to unique paths so each reason prints once.
+        unique: dict[str, dict] = {}
+        for d in ignored_diffs:
+            unique.setdefault(d["rel_path"], d)
+        print(f"Suppressed ({len(unique)} path(s) ignored via IGNORED_VOLUME_PATHS):")
+        for path, d in sorted(unique.items()):
+            print(f"  {path} — {d['reason']}")
         print()
 
     if env_changes:
@@ -570,7 +675,7 @@ def main():
     # Validate upstream exists
     if not UPSTREAM.exists():
         print(f"ERROR: Upstream not found at {UPSTREAM}", file=sys.stderr)
-        print("Run: cd ~/Dev/Workspaces/staticbot/supabase/supabase && git pull", file=sys.stderr)
+        print("Run: cd ~/Dev/Workspaces/supabot/supabase && git pull", file=sys.stderr)
         sys.exit(1)
 
     if args.command == "detect":
