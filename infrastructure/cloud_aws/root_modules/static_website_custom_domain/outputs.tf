@@ -25,3 +25,10 @@ output "cloudfront_distribution_ids" {
     for k, v in module.static_website : k => v.cloudfront_distribution_id
   }
 }
+
+output "nameservers" {
+  description = "Authoritative nameservers per certificate domain — empty if the zone was reused (use_existing_hosted_zone)."
+  value = {
+    for k, v in module.domains : k => v.nameservers
+  }
+}

@@ -36,3 +36,8 @@ output "cloudfront_distribution_ids" {
   description = "CloudFront distribution IDs for each website"
   value       = module.websites.cloudfront_distribution_ids
 }
+
+output "nameservers" {
+  description = "Authoritative nameservers per certificate domain"
+  value       = module.websites.nameservers
+}
