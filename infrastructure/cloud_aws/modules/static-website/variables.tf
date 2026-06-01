@@ -80,3 +80,17 @@ variable "maintenance_allowed_ips" {
   type        = list(string)
   default     = []
 }
+
+# Per-stack 301/302/307/308 redirects emitted at the edge by the viewer-request
+# CloudFront Function before path rewriting. Optional; default empty preserves
+# behaviour for sites that don't use this. Populated from the Stack edit page's
+# Redirects field via staticbot-app's RedirectsParser → HCL list-of-objects.
+variable "redirects" {
+  description = "Exact-path redirect rules (from → to with status). Default: no redirects."
+  type = list(object({
+    from   = string
+    to     = string
+    status = number
+  }))
+  default = []
+}

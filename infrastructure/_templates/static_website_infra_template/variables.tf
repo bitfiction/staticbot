@@ -28,6 +28,11 @@ variable "websites" {
       www_redirect            = bool
       maintenance_mode        = bool
       maintenance_allowed_ips = list(string)
+      redirects               = optional(list(object({
+        from   = string
+        to     = string
+        status = number
+      })), [])
     }))
   }))
 }

@@ -102,6 +102,25 @@ function handler(event) {
         }
     }
 
+    // === PER-STACK REDIRECTS (exact-match) ===
+    // Populated from the Stack edit page's "Redirects" field. Matched literally
+    // and short-circuits before www canonicalisation and path rewriting so
+    // legacy URLs don't get bounced through clean-URL processing first.
+    var redirects = ${jsonencode(var.redirects)};
+    for (var i = 0; i < redirects.length; i++) {
+        var r = redirects[i];
+        if (uri === r.from) {
+            return {
+                statusCode: r.status,
+                statusDescription: r.status === 301 ? 'Moved Permanently'
+                                 : r.status === 308 ? 'Permanent Redirect'
+                                 : r.status === 307 ? 'Temporary Redirect'
+                                 : 'Found',
+                headers: { 'location': { value: r.to } }
+            };
+        }
+    }
+
     // === WWW REDIRECT ===
     var wwwRedirect = ${var.www_redirect};
     var domain = '${var.domain_name}';

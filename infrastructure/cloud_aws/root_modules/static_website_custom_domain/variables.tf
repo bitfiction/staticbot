@@ -29,6 +29,11 @@ variable "websites" {
     content_path            = optional(string)
     maintenance_mode        = optional(bool, false)
     maintenance_allowed_ips = optional(list(string), [])
+    redirects               = optional(list(object({
+      from   = string
+      to     = string
+      status = number
+    })), [])
 
     # For multi-stage deployments
     stages = optional(list(object({
@@ -38,6 +43,11 @@ variable "websites" {
       content_path            = string
       maintenance_mode        = bool
       maintenance_allowed_ips = list(string)
+      redirects               = optional(list(object({
+        from   = string
+        to     = string
+        status = number
+      })), [])
     })))
   }))
 }

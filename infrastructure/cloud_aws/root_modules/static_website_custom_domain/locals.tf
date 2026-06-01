@@ -14,6 +14,7 @@ locals {
           www_redirect            = try(stage.www_redirect, false)
           maintenance_mode        = try(stage.maintenance_mode, false)
           maintenance_allowed_ips = try(stage.maintenance_allowed_ips, [])
+          redirects               = try(stage.redirects, [])
           full_domain             = "${stage.subdomain}.${website.domain_name}"
           content_path            = coalesce(stage.content_path, "${path.module}/../../../../websites/${website.domain_name}/${stage.subdomain}") // fallback only for manual deployments
         }
@@ -26,6 +27,7 @@ locals {
           www_redirect            = false
           maintenance_mode        = try(website.maintenance_mode, false)
           maintenance_allowed_ips = try(website.maintenance_allowed_ips, [])
+          redirects               = try(website.redirects, [])
           full_domain             = "${website.subdomain}.${website.domain_name}"
           content_path            = website.content_path
         }

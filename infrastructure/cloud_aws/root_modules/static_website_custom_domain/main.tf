@@ -61,4 +61,5 @@ module "static_website" {
   www_redirect            = try(each.value.www_redirect, false)
   maintenance_mode        = try(each.value.maintenance_mode, false)
   maintenance_allowed_ips = try(each.value.maintenance_allowed_ips, [])
+  redirects               = try(each.value.redirects, [])
 }

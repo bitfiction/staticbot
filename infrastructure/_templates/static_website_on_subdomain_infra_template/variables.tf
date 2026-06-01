@@ -31,6 +31,11 @@ variable "websites" {
     content_path                    = string
     maintenance_mode                = bool
     maintenance_allowed_ips         = list(string)
+    redirects                       = optional(list(object({
+      from   = string
+      to     = string
+      status = number
+    })), [])
   }))
 }
 

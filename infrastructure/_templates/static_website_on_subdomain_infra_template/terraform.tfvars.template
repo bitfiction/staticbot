@@ -24,6 +24,7 @@ websites = {
     content_path            = "<content_path>"
     maintenance_mode        = false
     maintenance_allowed_ips = []
+    redirects               = <redirects>
   }
 }
 

@@ -22,6 +22,7 @@ websites = {
         www_redirect            = <stage_www_redirect>
         maintenance_mode        = false
         maintenance_allowed_ips = []
+        redirects               = <redirects>
       }
     ]
   }
