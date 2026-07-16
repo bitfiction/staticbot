@@ -1,0 +1,28 @@
+account_name = "<account_name>"
+
+cloudflare_account = {
+  account_id = "<cf_account_id>"
+  api_token  = "<cf_api_token>"
+}
+
+shared_infra = {
+  dispatch_namespace_name = "<dispatch_namespace_name>"
+  dispatch_namespace_id   = "<dispatch_namespace_id>"
+  routes_kv_namespace_id  = "<routes_kv_namespace_id>"
+  zone_id                 = "<zone_id>"
+  fallback_hostname       = "<fallback_hostname>"
+}
+
+app = {
+  worker_name       = "<worker_name>"
+  customer_hostname = "<customer_hostname>"
+  plain_env         = <plain_env>
+}
+
+worker_secrets = <worker_secrets>
+
+common_tags = {
+  Customer   = "<customer_slug>"
+  Deployment = "<deployment_id>"
+  ManagedBy  = "Staticbot"
+}
