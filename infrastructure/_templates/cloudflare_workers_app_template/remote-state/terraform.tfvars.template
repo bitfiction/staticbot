@@ -1,0 +1,3 @@
+# Cloudflare Workers tenants share staticbot-prod-terraform-state and
+# staticbot-prod-terraform-locks. The remote-state step is a no-op — no
+# per-tenant AWS resources need to be provisioned.
