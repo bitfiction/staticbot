@@ -49,7 +49,6 @@ resource "cloudflare_custom_hostname" "customer" {
     type                  = "dv"
     bundle_method         = "ubiquitous"
     wildcard              = false
-    certificate_authority = "google"
     settings = {
       min_tls_version = "1.2"
     }
