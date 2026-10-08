@@ -62,4 +62,5 @@ module "static_website" {
   maintenance_mode        = try(each.value.maintenance_mode, false)
   maintenance_allowed_ips = try(each.value.maintenance_allowed_ips, [])
   redirects               = try(each.value.redirects, [])
+  builder_asset_base_url  = try(each.value.builder_asset_base_url, "")
 }

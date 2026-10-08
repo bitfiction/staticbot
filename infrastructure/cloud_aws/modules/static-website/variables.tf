@@ -94,3 +94,19 @@ variable "redirects" {
   }))
   default = []
 }
+
+# Public base URL of the customer's own Supabase bucket holding migrated builder media, e.g.
+# "https://<ref>.supabase.co/storage/v1/object/public/builder-assets/lovable". Set by
+# staticbot-app from the website template's VITE_SUPABASE_URL; empty for every site that never came
+# from a builder. When set, the distribution gains a second origin and a "/__l5e/*" behaviour that
+# PROXIES those bytes — see builder-assets.tf for why proxied and never copied.
+variable "builder_asset_base_url" {
+  description = "Supabase public base URL for migrated builder assets served at /__l5e/*. Empty disables the route entirely."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.builder_asset_base_url == "" || can(regex("^https://[^/]+/.+", var.builder_asset_base_url))
+    error_message = "builder_asset_base_url must be empty or an https URL with a path (host alone gives CloudFront no origin_path)."
+  }
+}

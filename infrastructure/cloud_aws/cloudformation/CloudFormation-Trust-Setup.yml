@@ -71,6 +71,13 @@ Resources:
                 Action:
                   - 's3:*'
                   - 'cloudfront:*'
+                  # NOT granted here, deliberately: "cloudfront-keyvaluestore:*". A KeyValueStore is
+                  # only used by the SHARED light-preview distribution, which lives in Staticbot's
+                  # managed account — every preview deployment in prod targets it, and none has ever
+                  # targeted a customer account. A customer's own live site serves "/__l5e/*" from a
+                  # Terraform CloudFront origin and never reads a KVS. Granting it here would widen
+                  # what we ask customers to trust us with, for a capability their account cannot use.
+                  # The managed account's grant lives in infra/aws/environments/prod-hosting instead.
                   - 'acm:*'
                   - 'iam:*'
                   - 'dynamodb:*'

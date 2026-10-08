@@ -79,6 +79,65 @@ resource "aws_cloudfront_distribution" "website" {
     }
   }
 
+  # Second origin: the customer's OWN Supabase project, serving the builder media Phase 7 copied
+  # there. Present only when the site has any — see builder-assets.tf. `origin_path` supplies the
+  # /storage/v1/object/public/... prefix, which is why the attached function only has to strip
+  # "/__l5e".
+  dynamic "origin" {
+    for_each = local.builder_assets_enabled ? [1] : []
+    content {
+      domain_name = local.builder_asset_host
+      origin_id   = "builder-assets"
+      origin_path = local.builder_asset_origin_path
+
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "https-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+  }
+
+  # Evaluated before default_cache_behavior, so "/__l5e/*" never reaches the S3 origin (which would
+  # answer with the SPA shell and a 200). No cookies and no Authorization forwarded: the visitor's
+  # credentials must never reach the customer's Supabase project. Cached hard — the asset id in the
+  # path changes whenever the bytes do.
+  dynamic "ordered_cache_behavior" {
+    for_each = local.builder_assets_enabled ? [1] : []
+    content {
+      path_pattern           = "/__l5e/*"
+      target_origin_id       = "builder-assets"
+      viewer_protocol_policy = "redirect-to-https"
+      allowed_methods        = ["GET", "HEAD"]
+      cached_methods         = ["GET", "HEAD"]
+      compress               = true
+
+      min_ttl     = 0
+      default_ttl = 31536000
+      max_ttl     = 31536000
+
+      forwarded_values {
+        query_string = false
+        cookies {
+          forward = "none"
+        }
+      }
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.builder_assets[0].arn
+      }
+
+      # Turns the distribution-wide 404 -> index.html/200 rule back into an honest 404 on this
+      # path, and sets the immutable cache header. See builder-assets.tf.
+      function_association {
+        event_type   = "viewer-response"
+        function_arn = aws_cloudfront_function.builder_assets_response[0].arn
+      }
+    }
+  }
+
   # Default cache behavior
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]

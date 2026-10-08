@@ -15,6 +15,7 @@ module "websites" {
       maintenance_mode                = v.maintenance_mode
       maintenance_allowed_ips         = v.maintenance_allowed_ips
       redirects                       = try(v.redirects, [])
+      builder_asset_base_url          = try(v.builder_asset_base_url, "")
     }
   }
   common_tags = var.common_tags

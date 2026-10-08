@@ -29,6 +29,9 @@ variable "websites" {
     content_path            = optional(string)
     maintenance_mode        = optional(bool, false)
     maintenance_allowed_ips = optional(list(string), [])
+    # Public Supabase base URL for migrated builder media served at /__l5e/* (see the
+    # static-website module's builder-assets.tf). Empty = no such route on this site.
+    builder_asset_base_url  = optional(string, "")
     redirects               = optional(list(object({
       from   = string
       to     = string
@@ -43,6 +46,7 @@ variable "websites" {
       content_path            = string
       maintenance_mode        = bool
       maintenance_allowed_ips = list(string)
+      builder_asset_base_url  = optional(string, "")
       redirects               = optional(list(object({
         from   = string
         to     = string
