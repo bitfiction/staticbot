@@ -1,7 +1,7 @@
 # Template migrations
 
-SQL here brings databases created by an older version of this template up to
-what the current template's first boot produces. Add one when a sync changes
+SQL here brings databases created by an older template version up to what the
+current first boot produces. Add one when a sync changes
 upstream's `docker/volumes/db/*.sql` (those files only run at first boot) or
 when the template's own init changes.
 

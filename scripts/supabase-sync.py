@@ -67,28 +67,37 @@ RETIRED_IMAGES = {
     "kong/kong:": "Kong is deprecated upstream (superseded by Envoy, self-hosted 0.8.0)",
 }
 
+# "db_lifecycle": where the template keeps its copy of DB_LIFECYCLE_SOURCE.
 TEMPLATES = {
     "do_single": {
         "label": "DO Single-Tenant",
         "base": WORKSPACE / "staticbot" / "infrastructure" / "_templates" / "do_supabase_self_hosting_template",
         "docker_sync": "full",
+        "db_lifecycle": "k8s/db-lifecycle",
     },
     "aws_single": {
         "label": "AWS Single-Tenant",
         "base": WORKSPACE / "staticbot" / "infrastructure" / "_templates" / "aws_supabase_self_hosting_template",
         "docker_sync": "full",
+        "db_lifecycle": "db-lifecycle",
     },
     "mt_shared": {
         "label": "Multi-Tenant Shared",
         "base": WORKSPACE / "staticbot-control-center" / "infra" / "digitalocean" / "modules-tenants" / "shared",
         "docker_sync": "subset",
+        "db_lifecycle": "db-lifecycle",
     },
     "mt_tenant": {
         "label": "Multi-Tenant Per-Tenant",
         "base": WORKSPACE / "staticbot" / "infrastructure" / "_templates" / "do_supabase_multi_tenant_template",
         "docker_sync": "subset",
+        "db_lifecycle": "k8s/db-lifecycle",
     },
 }
+
+# Schema-upgrade and backup scripts shared by every template's Postgres
+# (README inside). Edited here; `apply` copies it into each template.
+DB_LIFECYCLE_SOURCE = WORKSPACE / "staticbot" / "infrastructure" / "_templates" / "_shared" / "supabase-db-lifecycle"
 
 # Volume directories to diff (relative to docker/)
 VOLUME_DIRS = ["volumes/db", "volumes/api", "volumes/pooler", "volumes/logs", "volumes/functions"]
@@ -111,12 +120,6 @@ SUBSET_REQUIRED = {
 IGNORED_VOLUME_PATHS: dict[str, str] = {
     "volumes/db/init": "Legacy dir; data.sql is empty and not mounted by upstream docker-compose.yml",
 }
-
-# Templates whose databases are upgraded in place by a migrate job
-# (k8s/db-lifecycle): image migrations a newer Postgres image adds need an
-# apply/skip decision there, and changed upstream init SQL needs a template
-# migration, because existing databases never re-run first-boot SQL.
-DB_LIFECYCLE_TEMPLATES = ["mt_tenant"]
 
 # Upstream files whose changes always need a human to port them into Terraform.
 REVIEW_FILES = [
@@ -456,32 +459,38 @@ def image_migrations(image: str) -> list[str] | None:
     return result.stdout.split() if result.returncode == 0 else None
 
 
-def decided_image_migrations(tmpl: dict) -> set[str]:
-    path = tmpl["base"] / "k8s" / "db-lifecycle" / "image-migrations.txt"
+def decided_image_migrations() -> set[str]:
+    path = DB_LIFECYCLE_SOURCE / "image-migrations.txt"
     if not path.exists():
         return set()
     return {line.split()[0] for line in path.read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")}
 
 
 def detect_db_lifecycle(image_changes: list[dict], volume_diffs: list[dict]) -> list[dict]:
-    """What existing databases need by hand: image-migration decisions and template migrations."""
+    """What existing databases need by hand: image-migration decisions, template
+    migrations, and template copies of DB_LIFECYCLE_SOURCE that drifted."""
     items = []
-    for tmpl_key in DB_LIFECYCLE_TEMPLATES:
-        tmpl = TEMPLATES[tmpl_key]
-        for ch in image_changes:
-            if ch["template"] != tmpl_key or ch["service"] != "db":
-                continue
-            old, new = image_migrations(ch["current"]), image_migrations(ch["upstream"])
-            if old is None or new is None:
-                items.append({"template_label": tmpl["label"], "kind": "decide", "image": ch["upstream"],
-                              "files": None, "hint": f"docker run --rm --entrypoint ls {ch['upstream']} /docker-entrypoint-initdb.d/migrations"})
-                continue
-            undecided = sorted(set(new) - set(old) - decided_image_migrations(tmpl))
-            if undecided:
-                items.append({"template_label": tmpl["label"], "kind": "decide", "image": ch["upstream"], "files": undecided})
-        changed_sql = sorted({d["rel_path"] for d in volume_diffs if d["template"] == tmpl_key and d["rel_path"].startswith("volumes/db/")})
-        if changed_sql:
-            items.append({"template_label": tmpl["label"], "kind": "template_migration", "files": changed_sql})
+    # Every template runs the same image, so one decision list covers all of them.
+    for current, upstream in sorted({(ch["current"], ch["upstream"]) for ch in image_changes if ch["service"] == "db"}):
+        labels = sorted({ch["template_label"] for ch in image_changes if ch["service"] == "db" and ch["upstream"] == upstream})
+        old, new = image_migrations(current), image_migrations(upstream)
+        if old is None or new is None:
+            items.append({"kind": "decide", "image": upstream, "templates": labels, "files": None,
+                          "hint": f"docker run --rm --entrypoint ls {upstream} /docker-entrypoint-initdb.d/migrations"})
+            continue
+        undecided = sorted(set(new) - set(old) - decided_image_migrations())
+        if undecided:
+            items.append({"kind": "decide", "image": upstream, "templates": labels, "files": undecided})
+
+    changed_sql = sorted({d["rel_path"] for d in volume_diffs if d["rel_path"].startswith("volumes/db/")})
+    if changed_sql:
+        items.append({"kind": "template_migration", "files": changed_sql})
+
+    for tmpl in TEMPLATES.values():
+        copy = tmpl["base"] / tmpl["db_lifecycle"]
+        result = subprocess.run(["diff", "-rq", str(DB_LIFECYCLE_SOURCE), str(copy)], capture_output=True, text=True)
+        if result.returncode != 0:
+            items.append({"kind": "lifecycle_copy", "template_label": tmpl["label"], "path": str(copy.relative_to(WORKSPACE))})
     return items
 
 
@@ -584,18 +593,21 @@ def run_detect(as_json: bool = False):
         print()
 
     if db_lifecycle:
-        print("TIER 3 (review-required) — existing tenant databases (k8s/db-lifecycle):")
+        source = DB_LIFECYCLE_SOURCE.relative_to(WORKSPACE)
+        print(f"TIER 3 (review-required) — existing databases ({source}):")
         for item in db_lifecycle:
             if item["kind"] == "decide":
-                print(f"  {item['template_label']}: {item['image']} adds image migrations; add 'apply' or 'skip <reason>'")
-                print("    to k8s/db-lifecycle/image-migrations.txt, or the migrate job fails:")
+                print(f"  {item['image']} adds image migrations ({', '.join(item['templates'])}); add 'apply' or")
+                print(f"    'skip <reason>' to {source}/image-migrations.txt, or migrate.sh refuses to run:")
                 for f in item["files"] or [f"(Docker unavailable; list them with: {item['hint']})"]:
                     print(f"      {f}")
-            else:
-                print(f"  {item['template_label']}: upstream init SQL changed; existing databases only get it through a")
-                print("    template migration in k8s/db-lifecycle/migrations/:")
+            elif item["kind"] == "template_migration":
+                print("  upstream init SQL changed; existing databases only get it through a template migration")
+                print(f"    in {source}/migrations/:")
                 for f in item["files"]:
                     print(f"      {f}")
+            else:
+                print(f"  {item['template_label']}: {item['path']} differs from the source; `apply --safe` overwrites it")
         print()
 
     if ignored_diffs:
@@ -681,6 +693,16 @@ def apply_safe():
     for tmpl_key, tmpl in TEMPLATES.items():
         for message in sync_docker_dir(tmpl_key, tmpl):
             print(f"  {message}")
+
+    for tmpl in TEMPLATES.values():
+        copy = tmpl["base"] / tmpl["db_lifecycle"]
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["rsync", "-a", "--delete", "--exclude", ".DS_Store", str(DB_LIFECYCLE_SOURCE) + "/", str(copy) + "/"],
+            capture_output=True, text=True,
+        )
+        status = "Synced" if result.returncode == 0 else f"WARNING: rsync failed ({result.stderr.strip()}) for"
+        print(f"  {status} db-lifecycle → {tmpl['label']} {tmpl['db_lifecycle']}/")
 
     head = upstream_head()
     if head.get("commit"):

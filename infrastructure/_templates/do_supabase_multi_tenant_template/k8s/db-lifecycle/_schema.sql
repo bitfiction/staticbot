@@ -10,7 +10,7 @@ revoke all on schema _staticbot from public;
 -- One row per SQL file that shaped the schema:
 --   initdb/<dir>/<file>  ran at first boot (image + upstream docker/volumes/db SQL)
 --   image/<file>         Supabase image migration applied or skipped later
---   staticbot/<file>     template-owned migration (k8s/db-lifecycle/migrations)
+--   staticbot/<file>     template-owned migration (db-lifecycle/migrations)
 create table if not exists _staticbot.migrations (
   name       text primary key,
   checksum   text not null,

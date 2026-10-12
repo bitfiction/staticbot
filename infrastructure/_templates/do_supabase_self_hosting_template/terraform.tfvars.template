@@ -35,3 +35,7 @@ smtp_host        = "<smtp_host>"
 smtp_port        = <smtp_port>
 smtp_user        = "<smtp_user>"
 smtp_pass        = "<smtp_pass>"
+
+# Backups: Spaces key of the account this stack deploys into (creates the backup bucket)
+spaces_access_id  = "<customer_spaces_access_key>"
+spaces_secret_key = "<customer_spaces_secret_key>"

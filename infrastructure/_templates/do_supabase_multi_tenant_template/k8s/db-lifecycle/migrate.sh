@@ -1,13 +1,14 @@
 #!/bin/bash
-# Brings an existing tenant database up to the current template:
+# Brings an existing database up to the current template:
 #   1. Supabase image migrations the database hasn't seen (newer image), each
 #      applied or skipped per image-migrations.txt. An image migration without
 #      a decision fails the job before anything is applied.
-#   2. Template migrations (k8s/db-lifecycle/migrations) not yet applied.
+#   2. Template migrations (db-lifecycle/migrations) not yet applied.
 #   3. Reports what it can't fix: upstream init SQL that changed since the
 #      database was created, and extensions behind the image's version.
-# Runs as a Job with the database's current image, so the image's migration
-# files are at /docker-entrypoint-initdb.d/migrations.
+# Runs with the database's current image (a Job, or a one-shot container next
+# to Postgres), so the image's migration files are at
+# /docker-entrypoint-initdb.d/migrations.
 set -euo pipefail
 
 export PGUSER=supabase_admin PGDATABASE="${PGDATABASE:-postgres}"

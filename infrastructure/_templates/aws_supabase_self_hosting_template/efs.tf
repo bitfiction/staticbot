@@ -17,7 +17,7 @@ resource "aws_efs_mount_target" "private" {
 # --- Access Points ---
 
 # Postgres data directory. The POSIX identity must be the image's postgres
-# user (it differs between PG15 and PG17), and Postgres requires 0700.
+# user, and Postgres requires 0700.
 resource "aws_efs_access_point" "db" {
   file_system_id = aws_efs_file_system.main.id
   posix_user {
@@ -139,5 +139,26 @@ resource "aws_efs_access_point" "studio_snippets" {
 
   tags = {
     Name = "${local.sanitized_name}-studio-snippets-ap"
+  }
+}
+
+# Backup sidecar state (last base backup time, key-stored marker)
+resource "aws_efs_access_point" "db_backup_state" {
+  file_system_id = aws_efs_file_system.main.id
+  posix_user {
+    gid = local.postgres_posix_id.gid
+    uid = local.postgres_posix_id.uid
+  }
+  root_directory {
+    path = "/db-backup-state"
+    creation_info {
+      owner_gid   = local.postgres_posix_id.gid
+      owner_uid   = local.postgres_posix_id.uid
+      permissions = "700"
+    }
+  }
+
+  tags = {
+    Name = "${local.sanitized_name}-db-backup-state-ap"
   }
 }

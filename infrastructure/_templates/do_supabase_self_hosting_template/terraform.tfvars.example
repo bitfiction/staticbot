@@ -43,3 +43,8 @@ smtp_host        = "smtp.sendgrid.net"
 smtp_port        = 587
 smtp_user        = "apikey"
 smtp_pass        = "your-smtp-password"
+
+# Backups: the provider creates a Spaces bucket + bucket-scoped key with these
+spaces_access_id  = "DO00EXAMPLEACCESSKEY"
+spaces_secret_key = "your-spaces-secret-key"
+# backup_bucket_name = "supabase-test-pg-backups"   # default: <project_name>-pg-backups

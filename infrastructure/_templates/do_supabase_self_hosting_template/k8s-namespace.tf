@@ -39,6 +39,9 @@ resource "kubernetes_secret" "supabase_config" {
     S3_PROTOCOL_ACCESS_KEY_ID     = var.s3_protocol_access_key_id
     S3_PROTOCOL_ACCESS_KEY_SECRET = var.s3_protocol_access_key_secret
     OPENAI_API_KEY                = var.openai_api_key
+    # Bucket-scoped key for WAL-G (backups.tf)
+    BACKUP_S3_ACCESS_KEY_ID     = digitalocean_spaces_key.pg_backup.access_key
+    BACKUP_S3_SECRET_ACCESS_KEY = digitalocean_spaces_key.pg_backup.secret_key
   }
 }
 
@@ -74,6 +77,47 @@ locals {
     "99-realtime.sql"  = "migrations/99-realtime.sql"
     "99-logs.sql"      = "migrations/99-logs.sql"
     "99-pooler.sql"    = "migrations/99-pooler.sql"
+  }
+}
+
+# --- ConfigMap: database lifecycle (k8s/db-lifecycle) ---
+# baseline.sh records the schema baseline at first boot; migrate.sh (the
+# migrate-db Job) upgrades existing databases. See k8s/db-lifecycle/README.md.
+
+locals {
+  db_lifecycle_dir = "${path.module}/k8s/db-lifecycle"
+
+  db_template_migrations = {
+    for f in fileset("${local.db_lifecycle_dir}/migrations", "*.sql") :
+    f => file("${local.db_lifecycle_dir}/migrations/${f}")
+  }
+
+  db_lifecycle_files = merge({
+    "_schema.sql"          = file("${local.db_lifecycle_dir}/_schema.sql")
+    "baseline.sh"          = file("${local.db_lifecycle_dir}/baseline.sh")
+    "migrate.sh"           = file("${local.db_lifecycle_dir}/migrate.sh")
+    "backup.sh"            = file("${local.db_lifecycle_dir}/backup.sh")
+    "restore.sh"           = file("${local.db_lifecycle_dir}/restore.sh")
+    "image-migrations.txt" = file("${local.db_lifecycle_dir}/image-migrations.txt")
+    # ConfigMap key → path of the upstream init SQL, for migrate.sh's drift report
+    "init-mounts.txt" = join("", [for k, v in local.db_init_mounts : "${k} ${v}\n"])
+  }, local.db_template_migrations)
+}
+
+resource "kubernetes_config_map" "db_lifecycle" {
+  metadata {
+    name      = "db-lifecycle"
+    namespace = kubernetes_namespace.supabase.metadata[0].name
+  }
+
+  data = local.db_lifecycle_files
+
+  lifecycle {
+    precondition {
+      # migrate.sh only picks up files matching [0-9]*.sql, in name order
+      condition     = alltrue([for f in keys(local.db_template_migrations) : can(regex("^[0-9]{14}_[a-z0-9_]+\\.sql$", f))])
+      error_message = "Template migrations in k8s/db-lifecycle/migrations must be named <14-digit UTC timestamp>_<description>.sql."
+    }
   }
 }
 

@@ -1,16 +1,21 @@
 #!/bin/bash
-# Point-in-time restore of a tenant database from its WAL-G archive.
-# Run it in a one-off pod with the db Deployment scaled to 0 (see README.md):
-#   - the db PVC mounted at /pvc (whole volume, not the pgdata subPath)
-#   - WAL-G at /walg/wal-g and the tenant's WALG_* / AWS_* env
+# Point-in-time restore of a Supabase database from its WAL-G archive.
+# Run it once, with the database stopped (see your template's README):
+#   - the database volume mounted at /pvc (the whole volume, not the data
+#     subdirectory); its layout is set by DATA_SUBDIR (default pgdata),
+#     CUSTOM_SUBDIR (postgresql-custom) and STATE_SUBDIR (backup-state)
+#   - WAL-G at /walg/wal-g and the WALG_* / AWS_* env the database uses
 #   - RECOVERY_TARGET_TIME (e.g. "2026-06-14 09:30:00+00") or empty for the
 #     latest state; BACKUP_NAME (default LATEST) to pick a base backup
-# The current data directory is kept as pgdata.before-restore-<timestamp>.
-# Recovery runs here and promotes, so the db pod afterwards starts normally.
+# The current data directory is kept as <DATA_SUBDIR>.before-restore-<timestamp>.
+# Recovery runs here and promotes, so the database afterwards starts normally.
 set -euo pipefail
 
 walg=/walg/wal-g
 pvc=/pvc
+data="$pvc/${DATA_SUBDIR:-pgdata}"
+custom="$pvc/${CUSTOM_SUBDIR:-postgresql-custom}"
+state="$pvc/${STATE_SUBDIR:-backup-state}"
 backup=${BACKUP_NAME:-LATEST}
 target=${RECOVERY_TARGET_TIME:-}
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -18,39 +23,41 @@ log() { echo "[$(date -u +%FT%TZ)] $*"; }
 
 "$walg" backup-list
 
-if [ -d "$pvc/pgdata" ] && [ -n "$(ls -A "$pvc/pgdata")" ]; then
-  mv "$pvc/pgdata" "$pvc/pgdata.before-restore-$stamp"
-  log "kept the current data directory as pgdata.before-restore-$stamp"
+if [ -d "$data" ] && [ -n "$(ls -A "$data")" ]; then
+  mv "$data" "$data.before-restore-$stamp"
+  log "kept the current data directory as $(basename "$data").before-restore-$stamp"
 fi
-mkdir -p "$pvc/pgdata" "$pvc/postgresql-custom"
-chown postgres:postgres "$pvc/pgdata" && chmod 700 "$pvc/pgdata"
+mkdir -p "$data" "$custom"
+chown postgres:postgres "$data" && chmod 700 "$data"
 
 log "fetching base backup $backup"
-gosu postgres "$walg" backup-fetch "$pvc/pgdata" "$backup"
+gosu postgres "$walg" backup-fetch "$data" "$backup"
 
 # Vault secrets need the root key they were encrypted with
-if [ ! -f "$pvc/postgresql-custom/pgsodium_root.key" ]; then
-  "$walg" st get pgsodium_root.key "$pvc/postgresql-custom/pgsodium_root.key"
-  chown postgres:postgres "$pvc/postgresql-custom/pgsodium_root.key"
+if [ ! -f "$custom/pgsodium_root.key" ]; then
+  "$walg" st get pgsodium_root.key "$custom/pgsodium_root.key"
+  chown postgres:postgres "$custom/pgsodium_root.key"
   log "restored the pgsodium root key from the archive"
 fi
-install -o postgres -g postgres -m 600 "$pvc/postgresql-custom/pgsodium_root.key" /etc/postgresql-custom/pgsodium_root.key
+install -o postgres -g postgres -m 600 "$custom/pgsodium_root.key" /etc/postgresql-custom/pgsodium_root.key
 
-touch "$pvc/pgdata/recovery.signal"
+touch "$data/recovery.signal"
 # Archive during recovery too: promotion starts a new timeline, and its history
 # file must reach the archive or a later restore can't follow it.
-# The image's postgresql.conf pins data_directory to /var/lib/postgresql/data
-args=(-c config_file=/etc/postgresql/postgresql.conf -c "data_directory=$pvc/pgdata" -c listen_addresses=
+# The image's postgresql.conf pins data_directory to /var/lib/postgresql/data.
+args=(-c config_file=/etc/postgresql/postgresql.conf -c "data_directory=$data" -c listen_addresses=
       -c "restore_command=$walg wal-fetch %f %p" -c recovery_target_action=promote
       -c archive_mode=on -c "archive_command=$walg wal-push %p")
 [ -n "$target" ] && args+=(-c "recovery_target_time=$target")
 
 log "replaying WAL ${target:+up to $target}"
 recovery_log="$pvc/restore-$stamp.log"
-gosu postgres pg_ctl -D "$pvc/pgdata" -w -t 3600 -l "$recovery_log" -o "${args[*]@Q}" start || true
+# pg_ctl writes it as postgres, and the volume root is usually root's
+install -o postgres -g postgres -m 600 /dev/null "$recovery_log"
+gosu postgres pg_ctl -D "$data" -w -t 3600 -l "$recovery_log" -o "${args[*]@Q}" start || true
 # Postgres deletes recovery.signal when it promotes; if it stops instead, say why.
-while [ -e "$pvc/pgdata/recovery.signal" ]; do
-  if ! gosu postgres pg_ctl -D "$pvc/pgdata" status >/dev/null; then
+while [ -e "$data/recovery.signal" ]; do
+  if ! gosu postgres pg_ctl -D "$data" status >/dev/null; then
     log "ERROR: recovery stopped before promotion; end of $recovery_log:"
     tail -6 "$recovery_log" >&2
     if grep -q 'recovery ended before configured recovery target was reached' "$recovery_log"; then
@@ -61,8 +68,8 @@ while [ -e "$pvc/pgdata/recovery.signal" ]; do
   sleep 2
 done
 log "promoted; $(grep -o 'last completed transaction was at log time .*' "$recovery_log" | tail -1)"
-gosu postgres pg_ctl -D "$pvc/pgdata" -w -m fast stop
+gosu postgres pg_ctl -D "$data" -w -m fast stop
 
 # The backup sidecar takes a base backup of the new timeline on its next start
-rm -f "$pvc/backup-state/last_base_backup"
-log "restore complete; scale the db Deployment back to 1"
+rm -f "$state/last_base_backup"
+log "restore complete; start the database again"

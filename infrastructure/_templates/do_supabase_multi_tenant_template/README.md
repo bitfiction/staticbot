@@ -68,12 +68,67 @@ The shared cluster must be deployed first via `staticbot-control-center/infra/di
 | `variables.tf` | Tenant config + shared infra references |
 | `k8s-namespace.tf` | `tenant-{id}` namespace, Secret, ConfigMaps (init SQL, Envoy, functions), PVCs, NetworkPolicy |
 | `k8s-db.tf` | Tenant Postgres (init scripts, persisted `/etc/postgresql-custom`, baseline hook, Postgres major check) and the migrate Job |
-| `k8s/db-lifecycle/` | Schema baseline + migrations, backup sidecar, point-in-time restore (see its README) |
+| `k8s/db-lifecycle/` | Copy of `_shared/supabase-db-lifecycle`: schema baseline + migrations, backup sidecar, point-in-time restore (see its README; edit the source, not the copy) |
 | `k8s-services.tf` | Auth, PostgREST, Storage API, Meta, Edge Functions, Envoy |
 | `k8s-provisioning.tf` | Realtime + Supavisor registration job |
 | `k8s/register-tenant.py` | Registration script (template-owned, not synced) |
 | `outputs.tf` | tenant_id, api_url, keys, db/pooler hosts |
 | `docker/` | Subset of upstream `docker/` the Terraform reads; refreshed by `supabase-sync.py` |
+
+## Restoring a tenant database
+
+```bash
+NS=tenant-<id>
+kubectl -n $NS scale deploy/db --replicas=0
+kubectl -n $NS wait --for=delete pod -l app=db --timeout=120s
+
+# Fill in the time just before the incident (UTC), or leave it empty for the latest state
+TARGET="2026-06-14 09:30:00+00"
+WALG_IMAGE=<wal_g_image>
+BUCKET=<backup_s3_bucket> REGION=<backup_s3_region> TENANT=<id>
+
+kubectl -n $NS apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restore-db
+spec:
+  restartPolicy: Never
+  imagePullSecrets: [{ name: staticbot-prod }]   # the registry's name (DOCR integration)
+  initContainers:
+    - name: install-wal-g
+      image: $WALG_IMAGE
+      command: ["cp", "/wal-g", "/walg/wal-g"]
+      volumeMounts: [{ name: walg, mountPath: /walg }]
+  containers:
+    - name: restore
+      image: supabase/postgres:17.6.1.136   # the template's current image
+      command: ["bash", "/staticbot/restore.sh"]
+      env:
+        - { name: RECOVERY_TARGET_TIME, value: "$TARGET" }
+        - { name: WALG_S3_PREFIX, value: "s3://$BUCKET/tenants/$TENANT" }
+        - { name: AWS_REGION, value: "$REGION" }
+        - { name: WALG_COMPRESSION_METHOD, value: lz4 }
+        # - { name: AWS_ENDPOINT, value: "<backup_s3_endpoint>" }   # non-AWS stores
+        # - { name: AWS_S3_FORCE_PATH_STYLE, value: "true" }
+        - { name: AWS_ACCESS_KEY_ID, valueFrom: { secretKeyRef: { name: supabase-tenant-config, key: BACKUP_S3_ACCESS_KEY_ID } } }
+        - { name: AWS_SECRET_ACCESS_KEY, valueFrom: { secretKeyRef: { name: supabase-tenant-config, key: BACKUP_S3_SECRET_ACCESS_KEY } } }
+      volumeMounts:
+        - { name: db-data, mountPath: /pvc }
+        - { name: db-lifecycle, mountPath: /staticbot, readOnly: true }
+        - { name: walg, mountPath: /walg, readOnly: true }
+  volumes:
+    - { name: db-data, persistentVolumeClaim: { claimName: db-data } }
+    - { name: db-lifecycle, configMap: { name: db-lifecycle } }
+    - { name: walg, emptyDir: {} }
+EOF
+
+kubectl -n $NS logs -f restore-db -c restore    # ends with "restore complete"
+kubectl -n $NS delete pod restore-db
+kubectl -n $NS scale deploy/db --replicas=1
+```
+
+A `RECOVERY_TARGET_TIME` later than the archive's last transaction fails with a message saying how far the archive goes. After the restore the sidecar takes a fresh base backup of the new timeline. Once the tenant checks out, delete `pgdata.before-restore-*` from the volume to reclaim the space.
 
 ## Known Gaps
 

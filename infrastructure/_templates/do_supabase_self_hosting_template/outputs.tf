@@ -17,3 +17,9 @@ output "load_balancer_ip" {
   description = "IP of the DO Load Balancer (point DNS here)"
   value       = data.kubernetes_service.ingress_nginx_controller.status[0].load_balancer[0].ingress[0].ip
 }
+
+output "backup_bucket" {
+  description = "Spaces bucket holding the WAL-G backups"
+  value       = digitalocean_spaces_bucket.pg_backups.name
+}
+

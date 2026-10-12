@@ -1,14 +1,14 @@
 #!/bin/bash
-# Backup sidecar for the tenant Postgres, following Staticbot's own database
+# Backup sidecar for a Supabase Postgres, following Staticbot's own database
 # (infra/digitalocean/modules/postgres-droplet): Postgres archives every WAL
 # segment with WAL-G (archive_command, archive_timeout=60); this loop takes a
 # base backup every BACKUP_INTERVAL_HOURS and keeps BACKUP_RETAIN_FULL of them.
 # It also stores the pgsodium/Vault root key next to the archive, because it
 # lives outside PGDATA and a restore without it can't decrypt Vault secrets.
 #
-# Runs in the db pod with the same PGDATA mount, so `wal-g backup-push` sees the
-# data directory Postgres reports. Not `set -e`: one failed backup must not stop
-# the loop.
+# Runs next to Postgres (same pod or task) with the same PGDATA mount, so
+# `wal-g backup-push` sees the data directory Postgres reports. Not `set -e`:
+# one failed backup must not stop the loop.
 set -uo pipefail
 
 walg=/walg/wal-g

@@ -28,17 +28,6 @@ variable "vpc_cidr" {
 
 # --- Database ---
 
-variable "postgres_version" {
-  description = "Postgres major version. 17 is the upstream default; keep 15 only for an existing PG15 data directory that hasn't been upgraded yet."
-  type        = string
-  default     = "17"
-
-  validation {
-    condition     = contains(["15", "17"], var.postgres_version)
-    error_message = "postgres_version must be \"15\" or \"17\"."
-  }
-}
-
 variable "postgres_port" {
   description = "Port for Postgres"
   type        = number
@@ -428,3 +417,32 @@ variable "pooler_db_pool_size" {
   type        = number
   default     = 60
 }
+
+# --- Backups (WAL-G, like Staticbot's own database) ---
+# Continuous WAL archiving plus a base backup every backup_interval_hours, to an
+# S3 bucket in this account (backups.tf). See db-lifecycle/README.md.
+
+variable "backup_bucket_name" {
+  description = "S3 bucket for database backups (globally unique). Defaults to <project_name>-pg-backups."
+  type        = string
+  default     = null
+}
+
+variable "wal_g_image" {
+  description = "Public image carrying a static /wal-g (staticbot-control-center docker/wal-g)"
+  type        = string
+  default     = "ghcr.io/bitfiction/wal-g:v3.0.9"
+}
+
+variable "backup_interval_hours" {
+  description = "Hours between base backups (WAL is archived continuously in between)"
+  type        = number
+  default     = 24
+}
+
+variable "backup_retain_full" {
+  description = "Base backups to keep; older ones and their WAL are deleted"
+  type        = number
+  default     = 14
+}
+

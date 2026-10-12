@@ -1,0 +1,17 @@
+# Decisions for Supabase image migrations that a newer supabase/postgres image
+# adds, when applied to an EXISTING tenant database. (New databases run every
+# image migration at first boot; this file doesn't affect them.)
+#
+# Upstream writes some migrations for new databases only, e.g. ones that turn a
+# default off. Applying those to an existing tenant changes behavior it relies
+# on, so every new migration needs a human decision. migrate.sh fails the
+# apply until each pending migration is listed here.
+#
+# Format: <migration file> apply
+#         <migration file> skip <reason>
+
+# Example of a skip: 20260421000000_pg_graphql-off-by-default.sql (17.6.1.136)
+# is just `drop extension if exists pg_graphql;`; right for new databases,
+# but on an existing tenant it would break every app using /graphql/v1.
+#
+# Every tenant so far was initialised on 17.6.1.136, so no decisions yet.

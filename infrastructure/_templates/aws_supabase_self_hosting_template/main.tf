@@ -32,22 +32,14 @@ locals {
   short_name = replace(substr(local.sanitized_name, 0, 22), "/-$/", "")
   iam_name   = replace(substr(local.sanitized_name, 0, 48), "/-$/", "")
 
-  # One image per supported Postgres major. A PG15 data directory can't be
-  # opened by PG17: upgrade in place with docker/utils/upgrade-pg17.sh first.
-  postgres_images = {
-    "15" = "supabase/postgres:15.8.1.085"
-    "17" = "supabase/postgres:17.6.1.136"
-  }
-  postgres_image = local.postgres_images[var.postgres_version]
+  # Postgres 17 only. supabase-sync.py bumps this within the 17 track; a new
+  # major needs a pg_upgrade step first, which check-postgres-major enforces.
+  postgres_image = "supabase/postgres:17.6.1.136"
+  postgres_major = split(".", split(":", local.postgres_image)[1])[0]
 
-  # The postgres user's uid/gid differ between the PG15 and PG17 images. EFS
-  # access points force their POSIX identity on every file operation, and
-  # Postgres refuses a data directory it doesn't own, so they must match.
-  postgres_posix_ids = {
-    "15" = { uid = 105, gid = 106 }
-    "17" = { uid = 100, gid = 101 }
-  }
-  postgres_posix_id = local.postgres_posix_ids[var.postgres_version]
+  # The image's postgres user. EFS access points force their POSIX identity on
+  # every file operation, and Postgres refuses a data directory it doesn't own.
+  postgres_posix_id = { uid = 100, gid = 101 }
 
   # Since self-hosted 0.7.0 API_EXTERNAL_URL includes the /auth/v1 prefix (as on
   # the platform). Accept the bare form too, so older tfvars keep working.
@@ -59,6 +51,15 @@ locals {
 
   # PostgREST accepts a symmetric secret or a JWKS; prefer the JWKS when set.
   pgrst_jwt_secret = var.jwt_jwks != "" ? var.jwt_jwks : var.jwt_secret
+
+  # WAL-G settings for archive_command, the backup sidecar and restores
+  walg_env = [
+    { name = "WALG_S3_PREFIX", value = "s3://${aws_s3_bucket.pg_backups.bucket}/postgres" },
+    { name = "AWS_REGION", value = var.aws_region },
+    { name = "WALG_COMPRESSION_METHOD", value = "lz4" },
+    { name = "AWS_ACCESS_KEY_ID", value = aws_iam_access_key.pg_backup.id },
+    { name = "AWS_SECRET_ACCESS_KEY", value = aws_iam_access_key.pg_backup.secret },
+  ]
 
   # Optional env entries for asymmetric JWTs, like upstream's commented-out
   # JWT_KEYS/JWT_JWKS lines.

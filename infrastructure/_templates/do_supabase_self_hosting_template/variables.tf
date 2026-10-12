@@ -64,17 +64,6 @@ variable "letsencrypt_email" {
 
 # --- Database ---
 
-variable "postgres_version" {
-  description = "Postgres major version. 17 is the upstream default; keep 15 only for an existing PG15 data directory that hasn't been upgraded yet."
-  type        = string
-  default     = "17"
-
-  validation {
-    condition     = contains(["15", "17"], var.postgres_version)
-    error_message = "postgres_version must be \"15\" or \"17\"."
-  }
-}
-
 variable "postgres_port" {
   description = "Port for Postgres"
   type        = number
@@ -464,3 +453,46 @@ variable "pooler_db_pool_size" {
   type        = number
   default     = 60
 }
+
+# --- Backups (WAL-G, like Staticbot's own database) ---
+# Continuous WAL archiving plus a base backup every backup_interval_hours, to a
+# Spaces bucket in this account (backups.tf). See k8s/db-lifecycle/README.md.
+
+variable "spaces_access_id" {
+  description = "Spaces access key of the account this stack deploys into; the provider uses it to create the backup bucket (WAL-G gets its own bucket-scoped key). Null falls back to the SPACES_ACCESS_KEY_ID env var."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "spaces_secret_key" {
+  description = "Secret for spaces_access_id. Null falls back to the SPACES_SECRET_ACCESS_KEY env var."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "backup_bucket_name" {
+  description = "Spaces bucket for database backups (globally unique). Defaults to <project_name>-pg-backups."
+  type        = string
+  default     = null
+}
+
+variable "wal_g_image" {
+  description = "Public image carrying a static /wal-g (staticbot-control-center docker/wal-g)"
+  type        = string
+  default     = "ghcr.io/bitfiction/wal-g:v3.0.9"
+}
+
+variable "backup_interval_hours" {
+  description = "Hours between base backups (WAL is archived continuously in between)"
+  type        = number
+  default     = 24
+}
+
+variable "backup_retain_full" {
+  description = "Base backups to keep; older ones and their WAL are deleted"
+  type        = number
+  default     = 14
+}
+
