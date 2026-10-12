@@ -18,7 +18,7 @@ vault_enc_key    = "<vault_enc_key>"
 logflare_public_access_token  = "<logflare_public_access_token>"
 logflare_private_access_token = "<logflare_private_access_token>"
 
-# Dashboard (Kong)
+# Studio basic auth (API gateway)
 dashboard_password = "<dashboard_password>"
 
 # URLs

@@ -24,3 +24,18 @@ output "service_role_key" {
   value       = var.service_role_key
   sensitive   = true
 }
+
+output "db_host" {
+  description = "In-cluster hostname of the tenant's Postgres"
+  value       = local.db_fqdn
+}
+
+output "pooler_host" {
+  description = "In-cluster hostname of the shared Supavisor pooler (session mode on 5432, transaction mode on 6543)"
+  value       = local.supavisor_host
+}
+
+output "pooler_user" {
+  description = "Database user for connecting through Supavisor; Supavisor routes it to this tenant's Postgres"
+  value       = "postgres.${var.tenant_id}"
+}

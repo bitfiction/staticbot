@@ -1,8 +1,13 @@
 # --- Tenant Identity ---
 
 variable "tenant_id" {
-  description = "Unique tenant identifier (used in namespace, DB name, subdomain)"
+  description = "Unique tenant identifier (used in namespace, subdomain and as the Realtime/Supavisor tenant ID)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$", var.tenant_id))
+    error_message = "tenant_id must be a DNS label: lowercase letters, digits and dashes, at most 42 characters."
+  }
 }
 
 # --- Cluster Connection (from shared module outputs) ---
@@ -26,26 +31,16 @@ variable "cluster_ca_certificate" {
 
 # --- Shared Infrastructure References ---
 
-variable "shared_db_host" {
-  description = "Hostname of the shared PostgreSQL service (e.g. db.supabase-shared.svc.cluster.local)"
-  type        = string
-}
-
-variable "shared_db_port" {
-  description = "Port of the shared PostgreSQL service"
-  type        = number
-  default     = 5432
-}
-
-variable "shared_imgproxy_host" {
-  description = "Hostname of the shared ImgProxy service"
-  type        = string
-}
-
 variable "shared_namespace" {
-  description = "Kubernetes namespace for shared services"
+  description = "Kubernetes namespace of the shared services (Realtime, Supavisor, ImgProxy, Analytics)"
   type        = string
   default     = "supabase-shared"
+}
+
+variable "shared_api_jwt_secret" {
+  description = "Secret the shared Realtime and Supavisor management APIs verify admin JWTs with (shared module output `shared_api_jwt_secret`)"
+  type        = string
+  sensitive   = true
 }
 
 variable "api_domain" {
@@ -53,12 +48,29 @@ variable "api_domain" {
   type        = string
 }
 
-# --- Database ---
+# --- Database (tenant-owned Postgres) ---
+
+variable "postgres_version" {
+  description = "Postgres major version. 17 is the upstream default and what Supabase Cloud projects run; 15 only for restoring a PG15 dump that won't load into 17."
+  type        = string
+  default     = "17"
+
+  validation {
+    condition     = contains(["15", "17"], var.postgres_version)
+    error_message = "postgres_version must be \"15\" or \"17\"."
+  }
+}
 
 variable "postgres_password" {
-  description = "Password for shared Postgres (same across all tenants)"
+  description = "Password of this tenant's Postgres (postgres, supabase_admin and the service roles). Unique per tenant."
   type        = string
   sensitive   = true
+}
+
+variable "db_storage_size" {
+  description = "Size of the tenant's Postgres volume"
+  type        = string
+  default     = "5Gi"
 }
 
 # --- Tenant Secrets ---
@@ -112,6 +124,20 @@ variable "anon_key_asymmetric" {
 
 variable "service_role_key_asymmetric" {
   description = "Pre-signed ES256 JWT for service_role"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "jwt_keys" {
+  description = "JSON array of signing JWKs for Auth (EC private + legacy symmetric). Leave empty to sign with the legacy HS256 secret only."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "jwt_jwks" {
+  description = "Public JWKS JSON ({\"keys\":[...]}) PostgREST, Realtime, Storage and Edge Functions verify asymmetric JWTs with. Required when the opaque API keys are set."
   type        = string
   sensitive   = true
   default     = ""
@@ -230,9 +256,9 @@ variable "enable_phone_autoconfirm" {
 # --- PostgREST ---
 
 variable "pgrst_db_schemas" {
-  description = "PostgREST DB schemas"
+  description = "Schemas exposed by PostgREST. Upstream stopped exposing the protected `storage` schema in self-hosted 0.7.0."
   type        = string
-  default     = "public,storage,graphql_public"
+  default     = "public,graphql_public"
 }
 
 variable "pgrst_db_max_rows" {
@@ -298,4 +324,18 @@ variable "functions_verify_jwt" {
   description = "Verify JWT for edge functions"
   type        = bool
   default     = false
+}
+
+# --- Supavisor (shared pooler) ---
+
+variable "pooler_default_pool_size" {
+  description = "Supavisor pool size for this tenant"
+  type        = number
+  default     = 15
+}
+
+variable "pooler_max_client_conn" {
+  description = "Maximum Supavisor client connections for this tenant"
+  type        = number
+  default     = 100
 }

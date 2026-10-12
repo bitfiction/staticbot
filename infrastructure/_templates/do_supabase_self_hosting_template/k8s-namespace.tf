@@ -21,12 +21,20 @@ resource "kubernetes_secret" "supabase_config" {
     PG_META_CRYPTO_KEY            = var.pg_meta_crypto_key
     SECRET_KEY_BASE               = var.secret_key_base
     VAULT_ENC_KEY                 = var.vault_enc_key
+    REALTIME_DB_ENC_KEY           = var.realtime_db_enc_key
     LOGFLARE_PUBLIC_ACCESS_TOKEN  = var.logflare_public_access_token
     LOGFLARE_PRIVATE_ACCESS_TOKEN = var.logflare_private_access_token
     SUPABASE_PUBLISHABLE_KEY      = var.supabase_publishable_key
     SUPABASE_SECRET_KEY           = var.supabase_secret_key
     ANON_KEY_ASYMMETRIC           = var.anon_key_asymmetric
     SERVICE_ROLE_KEY_ASYMMETRIC   = var.service_role_key_asymmetric
+    # Edge Functions expect JSON maps of named keys, as in upstream docker-compose.yml
+    SUPABASE_PUBLISHABLE_KEYS = jsonencode({ default = var.supabase_publishable_key })
+    SUPABASE_SECRET_KEYS      = jsonencode({ default = var.supabase_secret_key })
+    # PostgREST accepts a symmetric secret or a JWKS; prefer the JWKS when set
+    PGRST_JWT_SECRET              = var.jwt_jwks != "" ? var.jwt_jwks : var.jwt_secret
+    JWT_KEYS                      = var.jwt_keys
+    JWT_JWKS                      = var.jwt_jwks
     SMTP_PASS                     = var.smtp_pass != null ? var.smtp_pass : ""
     S3_PROTOCOL_ACCESS_KEY_ID     = var.s3_protocol_access_key_id
     S3_PROTOCOL_ACCESS_KEY_SECRET = var.s3_protocol_access_key_secret
@@ -35,8 +43,9 @@ resource "kubernetes_secret" "supabase_config" {
 }
 
 # --- ConfigMap: DB init SQL scripts ---
-# Mounted to /docker-entrypoint-initdb.d/ on the PostgreSQL container.
-# Numeric prefixes control execution order.
+# Each file is mounted individually (sub_path) into the directory upstream's
+# docker-compose.yml uses, next to the image's own init-scripts/ and migrations/.
+# Mounting the ConfigMap over a whole directory would hide the image's files.
 
 resource "kubernetes_config_map" "db_init_scripts" {
   metadata {
@@ -55,23 +64,40 @@ resource "kubernetes_config_map" "db_init_scripts" {
   }
 }
 
-# --- ConfigMap: Kong API gateway config ---
-# The kong.yml uses docker-compose service names which match K8s service names
-# within the same namespace, except realtime which needs hostname replacement.
+locals {
+  # ConfigMap key → path under /docker-entrypoint-initdb.d/, as in upstream docker-compose.yml
+  db_init_mounts = {
+    "97-_supabase.sql" = "migrations/97-_supabase.sql"
+    "98-webhooks.sql"  = "init-scripts/98-webhooks.sql"
+    "99-roles.sql"     = "init-scripts/99-roles.sql"
+    "99-jwt.sql"       = "init-scripts/99-jwt.sql"
+    "99-realtime.sql"  = "migrations/99-realtime.sql"
+    "99-logs.sql"      = "migrations/99-logs.sql"
+    "99-pooler.sql"    = "migrations/99-pooler.sql"
+  }
+}
 
-resource "kubernetes_config_map" "kong_config" {
+# --- ConfigMap: Envoy API gateway config ---
+# Upstream's Envoy config, unchanged except for the Realtime cluster address:
+# compose reaches Realtime by its container name, K8s by the `realtime` Service.
+# The listener keeps rewriting the Host header to realtime-dev.supabase-realtime
+# because Realtime derives its tenant ID ("realtime-dev") from it.
+
+resource "kubernetes_config_map" "envoy_config" {
   metadata {
-    name      = "kong-config"
+    name      = "envoy-config"
     namespace = kubernetes_namespace.supabase.metadata[0].name
   }
 
   data = {
-    "kong.yml" = replace(
-      file("${path.module}/docker/volumes/api/kong.yml"),
-      "realtime-dev.supabase-realtime",
-      "realtime"
+    "envoy.yaml" = file("${path.module}/docker/volumes/api/envoy/envoy.yaml")
+    "cds.yaml" = replace(
+      file("${path.module}/docker/volumes/api/envoy/cds.yaml"),
+      "address: realtime-dev.supabase-realtime",
+      "address: realtime"
     )
-    "kong-entrypoint.sh" = file("${path.module}/docker/volumes/api/kong-entrypoint.sh")
+    "lds.template.yaml"    = file("${path.module}/docker/volumes/api/envoy/lds.template.yaml")
+    "docker-entrypoint.sh" = file("${path.module}/docker/volumes/api/envoy/docker-entrypoint.sh")
   }
 }
 
@@ -89,7 +115,42 @@ resource "kubernetes_config_map" "pooler_config" {
 }
 
 # --- ConfigMap: Vector log aggregation config ---
-# Adapted for K8s: uses kubernetes_logs source instead of docker_logs.
+# Upstream's vector.yml reads Docker container logs. On K8s we replace that
+# source with kubernetes_logs and rename events to the compose container names,
+# so every upstream transform and sink applies unchanged.
+
+locals {
+  vector_upstream = yamldecode(file("${path.module}/docker/volumes/logs/vector.yml"))
+
+  vector_config = merge(local.vector_upstream, {
+    sources = {
+      kubernetes_pods = {
+        type                 = "kubernetes_logs"
+        extra_field_selector = "metadata.namespace=${local.k8s_namespace}"
+      }
+    }
+    transforms = merge(local.vector_upstream.transforms, {
+      # Replaces upstream's docker_logs source of the same name
+      docker_host = {
+        type   = "remap"
+        inputs = ["kubernetes_pods"]
+        source = <<-VRL
+          container = string!(.kubernetes.container_name)
+          if container == "vector" { abort }
+          compose_names = {
+            "api-gw": "supabase-envoy",
+            "realtime": "realtime-dev.supabase-realtime",
+            "functions": "supabase-edge-functions"
+          }
+          mapped = get!(compose_names, [container])
+          .container_name = if mapped == null { "supabase-" + container } else { mapped }
+          del(.kubernetes)
+          del(.file)
+        VRL
+      }
+    })
+  })
+}
 
 resource "kubernetes_config_map" "vector_config" {
   metadata {
@@ -97,13 +158,16 @@ resource "kubernetes_config_map" "vector_config" {
     namespace = kubernetes_namespace.supabase.metadata[0].name
   }
 
+  # JSON, not YAML: yamlencode wraps long lines, which would split the
+  # ${LOGFLARE_PUBLIC_ACCESS_TOKEN?...} placeholders Vector interpolates in the
+  # raw file text.
   data = {
-    "vector.yml" = file("${path.module}/docker/volumes/logs/vector.yml")
+    "vector.json" = jsonencode(local.vector_config)
   }
 }
 
 # --- ConfigMap: Edge Functions default files ---
-# Mounted by init container to seed the functions PVC on first deploy.
+# Copied into the functions PVC by an init container on every start.
 
 resource "kubernetes_config_map" "functions_init" {
   metadata {
@@ -114,6 +178,7 @@ resource "kubernetes_config_map" "functions_init" {
   data = {
     "main-index.ts"  = file("${path.module}/docker/volumes/functions/main/index.ts")
     "hello-index.ts" = file("${path.module}/docker/volumes/functions/hello/index.ts")
+    "deno.jsonc"     = file("${path.module}/docker/volumes/functions/deno.jsonc")
   }
 }
 

@@ -22,9 +22,30 @@ resource "kubernetes_deployment" "db" {
       }
 
       spec {
+        # /etc/postgresql-custom holds config the image's postgresql.conf includes
+        # and the pgsodium/Vault root key. Upstream persists it in a named volume,
+        # which Docker seeds from the image; a PVC starts empty, so seed it here.
+        # Entries that already exist are kept, above all pgsodium_root.key:
+        # losing it makes Vault secrets undecryptable. (Per-entry loop because
+        # BusyBox `cp -an dir/. dest/` silently copies nothing.)
+        init_container {
+          name  = "init-postgresql-custom"
+          image = local.postgres_image
+          command = [
+            "sh", "-c",
+            "for f in /etc/postgresql-custom/*; do [ -e \"/persist/$(basename \"$f\")\" ] || cp -a \"$f\" /persist/; done && chown -R postgres:postgres /persist"
+          ]
+
+          volume_mount {
+            name       = "db-data"
+            mount_path = "/persist"
+            sub_path   = "postgresql-custom"
+          }
+        }
+
         container {
           name  = "db"
-          image = "supabase/postgres:15.8.1.085"
+          image = local.postgres_image
 
           port {
             container_port = 5432
@@ -70,55 +91,67 @@ resource "kubernetes_deployment" "db" {
             }
           }
           env {
-            name = "JWT_SECRET"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret.supabase_config.metadata[0].name
-                key  = "JWT_SECRET"
-              }
-            }
-          }
-          env {
             name  = "JWT_EXP"
             value = tostring(var.jwt_expiry)
           }
 
-          # PostgreSQL data volume
+          # PGDATA lives in a subdirectory: the volume root of a block-storage
+          # PVC contains lost+found, and initdb refuses a non-empty directory.
           volume_mount {
             name       = "db-data"
             mount_path = "/var/lib/postgresql/data"
+            sub_path   = "pgdata"
           }
 
-          # SQL init scripts from ConfigMap
           volume_mount {
-            name       = "db-init-scripts"
-            mount_path = "/docker-entrypoint-initdb.d/migrations"
+            name       = "db-data"
+            mount_path = "/etc/postgresql-custom"
+            sub_path   = "postgresql-custom"
+          }
+
+          dynamic "volume_mount" {
+            for_each = local.db_init_mounts
+            content {
+              name       = "db-init-scripts"
+              mount_path = "/docker-entrypoint-initdb.d/${volume_mount.value}"
+              sub_path   = volume_mount.key
+              read_only  = true
+            }
           }
 
           command = [
             "docker-entrypoint.sh", "postgres",
             "-c", "config_file=/etc/postgresql/postgresql.conf",
-            "-c", "log_min_messages=fatal"
+            "-c", "log_min_messages=fatal" # prevents Realtime polling queries from appearing in logs
           ]
+
+          # First boot runs the image's init scripts and migrations before the
+          # server listens on TCP; allow up to 5 minutes for that.
+          startup_probe {
+            exec {
+              command = ["pg_isready", "-U", "postgres", "-h", "localhost"]
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 60
+          }
 
           liveness_probe {
             exec {
               command = ["pg_isready", "-U", "postgres", "-h", "localhost"]
             }
-            initial_delay_seconds = 30
-            period_seconds        = 10
-            timeout_seconds       = 5
-            failure_threshold     = 6
+            period_seconds    = 10
+            timeout_seconds   = 5
+            failure_threshold = 6
           }
 
           readiness_probe {
             exec {
               command = ["pg_isready", "-U", "postgres", "-h", "localhost"]
             }
-            initial_delay_seconds = 5
-            period_seconds        = 5
-            timeout_seconds       = 5
-            failure_threshold     = 3
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
           }
 
           resources {
@@ -167,10 +200,11 @@ resource "kubernetes_service" "db" {
 }
 
 # --- Vector (Log Processing) ---
-# Collects logs from Supabase pods via K8s log files and forwards to analytics (Logflare).
-# Uses kubernetes_logs source which reads from /var/log/pods on the host node.
+# Collects logs from Supabase pods via K8s log files and forwards them to
+# Analytics (Logflare). kubernetes_logs only sees pods on its own node, so it
+# runs on every node.
 
-resource "kubernetes_deployment" "vector" {
+resource "kubernetes_daemonset" "vector" {
   metadata {
     name      = "vector"
     namespace = kubernetes_namespace.supabase.metadata[0].name
@@ -178,7 +212,6 @@ resource "kubernetes_deployment" "vector" {
   }
 
   spec {
-    replicas = 1
     selector {
       match_labels = { app = "vector" }
     }
@@ -186,6 +219,9 @@ resource "kubernetes_deployment" "vector" {
     template {
       metadata {
         labels = { app = "vector" }
+        annotations = {
+          "checksum/config" = sha256(kubernetes_config_map.vector_config.data["vector.json"])
+        }
       }
 
       spec {
@@ -195,7 +231,7 @@ resource "kubernetes_deployment" "vector" {
           name  = "vector"
           image = "timberio/vector:0.53.0-alpine"
 
-          args = ["--config", "/etc/vector/vector.yml"]
+          args = ["--config", "/etc/vector/vector.json"]
 
           env {
             name = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
@@ -203,6 +239,14 @@ resource "kubernetes_deployment" "vector" {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
                 key  = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
+              }
+            }
+          }
+          env {
+            name = "VECTOR_SELF_NODE_NAME"
+            value_from {
+              field_ref {
+                field_path = "spec.nodeName"
               }
             }
           }
@@ -268,20 +312,5 @@ resource "kubernetes_deployment" "vector" {
         }
       }
     }
-  }
-}
-
-resource "kubernetes_service" "vector" {
-  metadata {
-    name      = "vector"
-    namespace = kubernetes_namespace.supabase.metadata[0].name
-  }
-  spec {
-    selector = { app = "vector" }
-    port {
-      port        = 9001
-      target_port = 9001
-    }
-    type = "ClusterIP"
   }
 }

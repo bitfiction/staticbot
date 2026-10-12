@@ -22,16 +22,19 @@ jwt_secret       = "super-secret-jwt-token-with-at-least-32-characters-long"
 secret_key_base  = "UpNVntn3cDxHJpq99YMc05T1cDR4cUbKS76FBggwTkfyS1mSconfgCCaGQQdt330yrBiJrb5NLy8JTx6HNKNjA=="
 vault_enc_key    = "your-vault-enc-key-must-be-32-ch"
 
+# Realtime (exactly 16 chars: openssl rand -hex 8)
+realtime_db_enc_key = "0123456789abcdef"
+
 # Analytics (Logflare)
 logflare_public_access_token  = "your-logflare-public-token"
 logflare_private_access_token = "your-logflare-private-token"
 
-# Dashboard (Kong)
+# Studio basic auth (API gateway)
 dashboard_password = "your-dashboard-password"
 
 # URLs (update after deployment with the real domain/IP)
 supabase_public_url = "https://supabase.example.com"
-api_external_url    = "https://supabase.example.com"
+api_external_url    = "https://supabase.example.com/auth/v1" # optional; defaults to supabase_public_url + /auth/v1
 site_url            = "https://your-app.example.com"
 
 # SMTP

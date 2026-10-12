@@ -48,10 +48,22 @@ resource "aws_ecs_task_definition" "db" {
     }
   }
 
+  volume {
+    name = "db-config"
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.main.id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.db_config.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
   container_definitions = jsonencode([
     {
       name      = "db"
-      image     = "supabase/postgres:15.8.1.085"
+      image     = local.postgres_image
       essential = true
       portMappings = [
         {
@@ -67,7 +79,6 @@ resource "aws_ecs_task_definition" "db" {
         { name = "POSTGRES_PASSWORD", value = var.postgres_password },
         { name = "PGDATABASE", value = var.postgres_db },
         { name = "POSTGRES_DB", value = var.postgres_db },
-        { name = "JWT_SECRET", value = var.jwt_secret },
         { name = "JWT_EXP", value = tostring(var.jwt_expiry) },
         # Init SQL content injection
         { name = "SQL_REALTIME", value = file("${path.module}/docker/volumes/db/realtime.sql") },
@@ -83,12 +94,21 @@ resource "aws_ecs_task_definition" "db" {
           sourceVolume  = "db-data"
           containerPath = "/var/lib/postgresql/data"
           readOnly      = false
+        },
+        {
+          sourceVolume  = "db-config"
+          containerPath = "/mnt/postgresql-custom"
+          readOnly      = false
         }
       ]
-      # Complex command to write files and start postgres
+      # Write the init SQL next to the image's own init-scripts/ and migrations/
+      # (as upstream's docker-compose.yml mounts them), persist
+      # /etc/postgresql-custom on EFS (seeded from the image, existing entries
+      # such as pgsodium_root.key kept), then start Postgres.
       command = [
         "bash", "-c",
         <<EOT
+        set -e
         mkdir -p /docker-entrypoint-initdb.d/migrations /docker-entrypoint-initdb.d/init-scripts
         echo "$SQL_REALTIME" > /docker-entrypoint-initdb.d/migrations/99-realtime.sql
         echo "$SQL_WEBHOOKS" > /docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql
@@ -97,11 +117,12 @@ resource "aws_ecs_task_definition" "db" {
         echo "$SQL_SUPABASE" > /docker-entrypoint-initdb.d/migrations/97-_supabase.sql
         echo "$SQL_LOGS" > /docker-entrypoint-initdb.d/migrations/99-logs.sql
         echo "$SQL_POOLER" > /docker-entrypoint-initdb.d/migrations/99-pooler.sql
-        
-        # Determine command args
-        # Original: "postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "log_min_messages=fatal"
-        
-        docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf -c log_min_messages=fatal
+        for f in /etc/postgresql-custom/*; do
+          [ -e "/mnt/postgresql-custom/$(basename "$f")" ] || cp -a "$f" /mnt/postgresql-custom/
+        done
+        rm -rf /etc/postgresql-custom
+        ln -s /mnt/postgresql-custom /etc/postgresql-custom
+        exec docker-entrypoint.sh postgres -c config_file=/etc/postgresql/postgresql.conf -c log_min_messages=fatal
         EOT
       ]
       logConfiguration = {
@@ -113,14 +134,20 @@ resource "aws_ecs_task_definition" "db" {
         }
       }
       healthCheck = {
-        command = ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
-        interval = 5
-        timeout = 5
-        retries = 10
+        command     = ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+        interval    = 5
+        timeout     = 5
+        retries     = 10
+        startPeriod = 300
       }
     }
   ])
 }
+
+# --- Vector ---
+# Upstream's vector.yml collects Docker container logs, which Fargate doesn't
+# expose, so on AWS logs only reach CloudWatch (the Logs Explorer stays empty).
+# Shipping them to Logflare needs FireLens or a CloudWatch subscription.
 
 resource "aws_ecs_service" "vector" {
   name            = "vector"
@@ -183,10 +210,10 @@ resource "aws_ecs_task_definition" "vector" {
         }
       }
       healthCheck = {
-        command = ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9001/health"]
+        command  = ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9001/health"]
         interval = 5
-        timeout = 5
-        retries = 3
+        timeout  = 5
+        retries  = 3
       }
     }
   ])

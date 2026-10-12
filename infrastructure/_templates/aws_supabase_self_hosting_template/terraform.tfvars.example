@@ -22,12 +22,12 @@ vault_enc_key    = "your-super-secret-vault-enc-key-32-chars"
 logflare_public_access_token  = "your-logflare-public-token"
 logflare_private_access_token = "your-logflare-private-token"
 
-# Dashboard (Kong)
+# Studio basic auth (API gateway)
 dashboard_password = "your-dashboard-password"
 
 # URLs
-supabase_public_url = "http://<alb-dns-name>:8000" # Update after deployment or use custom domain
-api_external_url    = "http://<alb-dns-name>:8000"
+supabase_public_url = "http://<alb-dns-name>" # Update after deployment or use custom domain
+api_external_url    = "http://<alb-dns-name>/auth/v1" # optional; defaults to supabase_public_url + /auth/v1
 site_url            = "http://localhost:3000" # Your frontend URL
 
 # SMTP

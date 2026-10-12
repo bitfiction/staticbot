@@ -16,18 +16,20 @@ resource "aws_efs_mount_target" "private" {
 
 # --- Access Points ---
 
+# Postgres data directory. The POSIX identity must be the image's postgres
+# user (it differs between PG15 and PG17), and Postgres requires 0700.
 resource "aws_efs_access_point" "db" {
   file_system_id = aws_efs_file_system.main.id
   posix_user {
-    gid = 999
-    uid = 999
+    gid = local.postgres_posix_id.gid
+    uid = local.postgres_posix_id.uid
   }
   root_directory {
     path = "/db"
     creation_info {
-      owner_gid   = 999
-      owner_uid   = 999
-      permissions = "755"
+      owner_gid   = local.postgres_posix_id.gid
+      owner_uid   = local.postgres_posix_id.uid
+      permissions = "700"
     }
   }
 
@@ -93,5 +95,49 @@ resource "aws_efs_access_point" "config" {
 
   tags = {
     Name = "${local.sanitized_name}-config-ap"
+  }
+}
+
+# /etc/postgresql-custom: config the image's postgresql.conf includes, plus the
+# pgsodium/Vault root key. Seeded from the image on first boot; losing it makes
+# Vault secrets undecryptable.
+resource "aws_efs_access_point" "db_config" {
+  file_system_id = aws_efs_file_system.main.id
+  posix_user {
+    gid = local.postgres_posix_id.gid
+    uid = local.postgres_posix_id.uid
+  }
+  root_directory {
+    path = "/db-config"
+    creation_info {
+      owner_gid   = local.postgres_posix_id.gid
+      owner_uid   = local.postgres_posix_id.uid
+      permissions = "700"
+    }
+  }
+
+  tags = {
+    Name = "${local.sanitized_name}-db-config-ap"
+  }
+}
+
+# Studio's local SQL snippets (SNIPPETS_MANAGEMENT_FOLDER)
+resource "aws_efs_access_point" "studio_snippets" {
+  file_system_id = aws_efs_file_system.main.id
+  posix_user {
+    gid = 1000
+    uid = 1000
+  }
+  root_directory {
+    path = "/studio-snippets"
+    creation_info {
+      owner_gid   = 1000
+      owner_uid   = 1000
+      permissions = "755"
+    }
+  }
+
+  tags = {
+    Name = "${local.sanitized_name}-studio-snippets-ap"
   }
 }

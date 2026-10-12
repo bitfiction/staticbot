@@ -41,7 +41,7 @@ resource "aws_ecs_task_definition" "auth" {
   container_definitions = jsonencode([
     {
       name      = "auth"
-      image     = "supabase/gotrue:v2.186.0"
+      image     = "supabase/gotrue:v2.196.0"
       essential = true
       portMappings = [
         {
@@ -49,10 +49,10 @@ resource "aws_ecs_task_definition" "auth" {
           protocol      = "tcp"
         }
       ]
-      environment = [
+      environment = concat([
         { name = "GOTRUE_API_HOST", value = "0.0.0.0" },
         { name = "GOTRUE_API_PORT", value = "9999" },
-        { name = "API_EXTERNAL_URL", value = var.api_external_url },
+        { name = "API_EXTERNAL_URL", value = local.api_external_url },
         { name = "GOTRUE_DB_DRIVER", value = "postgres" },
         { name = "GOTRUE_DB_DATABASE_URL", value = "postgres://supabase_auth_admin:${var.postgres_password}@db.supabase.internal:${var.postgres_port}/${var.postgres_db}" }, # using internal DNS
         { name = "GOTRUE_SITE_URL", value = var.site_url },
@@ -63,6 +63,7 @@ resource "aws_ecs_task_definition" "auth" {
         { name = "GOTRUE_JWT_DEFAULT_GROUP_NAME", value = "authenticated" },
         { name = "GOTRUE_JWT_EXP", value = tostring(var.jwt_expiry) },
         { name = "GOTRUE_JWT_SECRET", value = var.jwt_secret },
+        { name = "GOTRUE_JWT_ISSUER", value = local.api_external_url },
         { name = "GOTRUE_EXTERNAL_EMAIL_ENABLED", value = tostring(var.enable_email_signup) },
         { name = "GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED", value = tostring(var.enable_anonymous_users) },
         { name = "GOTRUE_MAILER_AUTOCONFIRM", value = tostring(var.enable_email_autoconfirm) },
@@ -78,7 +79,7 @@ resource "aws_ecs_task_definition" "auth" {
         { name = "GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE", value = var.mailer_urlpaths_email_change },
         { name = "GOTRUE_EXTERNAL_PHONE_ENABLED", value = tostring(var.enable_phone_signup) },
         { name = "GOTRUE_SMS_AUTOCONFIRM", value = tostring(var.enable_phone_autoconfirm) }
-      ]
+      ], local.jwt_keys_env)
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -88,10 +89,10 @@ resource "aws_ecs_task_definition" "auth" {
         }
       }
       healthCheck = {
-        command = ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+        command  = ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
         interval = 5
-        timeout = 5
-        retries = 3
+        timeout  = 5
+        retries  = 3
       }
     }
   ])
@@ -140,7 +141,7 @@ resource "aws_ecs_task_definition" "rest" {
   container_definitions = jsonencode([
     {
       name      = "rest"
-      image     = "postgrest/postgrest:v14.8"
+      image     = "postgrest/postgrest:v14.17"
       essential = true
       portMappings = [
         {
@@ -154,12 +155,21 @@ resource "aws_ecs_task_definition" "rest" {
         { name = "PGRST_DB_MAX_ROWS", value = tostring(var.pgrst_db_max_rows) },
         { name = "PGRST_DB_EXTRA_SEARCH_PATH", value = var.pgrst_db_extra_search_path },
         { name = "PGRST_DB_ANON_ROLE", value = "anon" },
-        { name = "PGRST_JWT_SECRET", value = var.jwt_secret },
+        { name = "PGRST_ADMIN_SERVER_PORT", value = "3001" },
+        { name = "PGRST_ADMIN_SERVER_HOST", value = "localhost" },
+        # Symmetric secret, or the JWKS when asymmetric keys are configured
+        { name = "PGRST_JWT_SECRET", value = local.pgrst_jwt_secret },
         { name = "PGRST_DB_USE_LEGACY_GUCS", value = "false" },
-        { name = "PGRST_APP_SETTINGS_JWT_SECRET", value = var.jwt_secret },
         { name = "PGRST_APP_SETTINGS_JWT_EXP", value = tostring(var.jwt_expiry) }
       ]
       command = ["postgrest"]
+      # `postgrest --ready` queries the admin server on localhost:3001
+      healthCheck = {
+        command  = ["CMD", "postgrest", "--ready"]
+        interval = 5
+        timeout  = 5
+        retries  = 3
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -215,7 +225,7 @@ resource "aws_ecs_task_definition" "realtime" {
   container_definitions = jsonencode([
     {
       name      = "realtime"
-      image     = "supabase/realtime:v2.76.5"
+      image     = "supabase/realtime:v2.134.10"
       essential = true
       portMappings = [
         {
@@ -223,7 +233,7 @@ resource "aws_ecs_task_definition" "realtime" {
           protocol      = "tcp"
         }
       ]
-      environment = [
+      environment = concat([
         { name = "PORT", value = "4000" },
         { name = "DB_HOST", value = "db.supabase.internal" },
         { name = "DB_PORT", value = tostring(var.postgres_port) },
@@ -231,7 +241,7 @@ resource "aws_ecs_task_definition" "realtime" {
         { name = "DB_PASSWORD", value = var.postgres_password },
         { name = "DB_NAME", value = var.postgres_db },
         { name = "DB_AFTER_CONNECT_QUERY", value = "SET search_path TO _realtime" },
-        { name = "DB_ENC_KEY", value = "supabaserealtime" },
+        { name = "DB_ENC_KEY", value = var.realtime_db_enc_key },
         { name = "API_JWT_SECRET", value = var.jwt_secret },
         { name = "SECRET_KEY_BASE", value = var.secret_key_base },
         { name = "METRICS_JWT_SECRET", value = var.jwt_secret },
@@ -242,7 +252,7 @@ resource "aws_ecs_task_definition" "realtime" {
         { name = "SEED_SELF_HOST", value = "true" },
         { name = "RUN_JANITOR", value = "true" },
         { name = "DISABLE_HEALTHCHECK_LOGGING", value = "true" }
-      ]
+      ], local.jwks_env ? [{ name = "API_JWT_JWKS", value = var.jwt_jwks }] : [])
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -252,10 +262,10 @@ resource "aws_ecs_task_definition" "realtime" {
         }
       }
       healthCheck = {
-        command = ["CMD-SHELL", "curl -sSfL --head -o /dev/null -H \"Authorization: Bearer ${var.anon_key}\" http://localhost:4000/api/tenants/realtime-dev/health"]
-        interval = 30
-        timeout = 5
-        retries = 3
+        command     = ["CMD-SHELL", "curl -sSfL --head -o /dev/null -H \"Authorization: Bearer ${var.anon_key}\" http://localhost:4000/api/tenants/realtime-dev/health"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
         startPeriod = 10
       }
     }
@@ -346,7 +356,7 @@ resource "aws_ecs_task_definition" "storage" {
   container_definitions = jsonencode([
     {
       name      = "storage"
-      image     = "supabase/storage-api:v1.48.26"
+      image     = "supabase/storage-api:v1.74.0"
       essential = true
       portMappings = [
         {
@@ -354,7 +364,7 @@ resource "aws_ecs_task_definition" "storage" {
           protocol      = "tcp"
         }
       ]
-      environment = [
+      environment = concat([
         { name = "ANON_KEY", value = var.anon_key },
         { name = "SERVICE_KEY", value = var.service_role_key },
         { name = "POSTGREST_URL", value = "http://rest.supabase.internal:3000" },
@@ -372,7 +382,7 @@ resource "aws_ecs_task_definition" "storage" {
         { name = "IMGPROXY_URL", value = "http://imgproxy.supabase.internal:5001" },
         { name = "S3_PROTOCOL_ACCESS_KEY_ID", value = var.s3_protocol_access_key_id },
         { name = "S3_PROTOCOL_ACCESS_KEY_SECRET", value = var.s3_protocol_access_key_secret }
-      ]
+      ], local.jwks_env ? [{ name = "JWT_JWKS", value = var.jwt_jwks }] : [])
       mountPoints = [
         {
           sourceVolume  = "storage-data"
@@ -389,10 +399,10 @@ resource "aws_ecs_task_definition" "storage" {
         }
       }
       healthCheck = {
-        command = ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/status"]
+        command  = ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/status"]
         interval = 5
-        timeout = 5
-        retries = 3
+        timeout  = 5
+        retries  = 3
       }
     }
   ])
@@ -422,7 +432,7 @@ resource "aws_ecs_task_definition" "imgproxy" {
   container_definitions = jsonencode([
     {
       name      = "imgproxy"
-      image     = "darthsim/imgproxy:v3.30.1"
+      image     = "darthsim/imgproxy:v3.31.4"
       essential = true
       portMappings = [
         {
@@ -453,10 +463,10 @@ resource "aws_ecs_task_definition" "imgproxy" {
         }
       }
       healthCheck = {
-        command = ["CMD", "imgproxy", "health"]
+        command  = ["CMD", "imgproxy", "health"]
         interval = 5
-        timeout = 5
-        retries = 3
+        timeout  = 5
+        retries  = 3
       }
     }
   ])

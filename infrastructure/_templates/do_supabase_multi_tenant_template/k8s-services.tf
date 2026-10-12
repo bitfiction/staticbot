@@ -1,5 +1,4 @@
 # --- Auth (GoTrue) ---
-# Per-tenant instance with static DB connection to tenant_{id} database.
 
 resource "kubernetes_deployment" "auth" {
   metadata {
@@ -22,7 +21,7 @@ resource "kubernetes_deployment" "auth" {
       spec {
         container {
           name  = "auth"
-          image = "supabase/gotrue:v2.186.0"
+          image = "supabase/gotrue:v2.196.0"
 
           port {
             container_port = 9999
@@ -39,7 +38,7 @@ resource "kubernetes_deployment" "auth" {
           }
           env {
             name  = "API_EXTERNAL_URL"
-            value = local.api_url
+            value = local.api_external_url
           }
           env {
             name  = "GOTRUE_DB_DRIVER"
@@ -77,6 +76,7 @@ resource "kubernetes_deployment" "auth" {
             name  = "GOTRUE_JWT_EXP"
             value = tostring(var.jwt_expiry)
           }
+          # Legacy symmetric HS256 key
           env {
             name = "GOTRUE_JWT_SECRET"
             value_from {
@@ -85,6 +85,23 @@ resource "kubernetes_deployment" "auth" {
                 key  = "JWT_SECRET"
               }
             }
+          }
+          # JSON array of signing JWKs (EC private + legacy symmetric)
+          dynamic "env" {
+            for_each = local.jwt_keys_enabled ? [1] : []
+            content {
+              name = "GOTRUE_JWT_KEYS"
+              value_from {
+                secret_key_ref {
+                  name = kubernetes_secret.tenant_config.metadata[0].name
+                  key  = "JWT_KEYS"
+                }
+              }
+            }
+          }
+          env {
+            name  = "GOTRUE_JWT_ISSUER"
+            value = local.api_external_url
           }
           env {
             name  = "GOTRUE_EXTERNAL_EMAIL_ENABLED"
@@ -152,6 +169,16 @@ resource "kubernetes_deployment" "auth" {
             value = tostring(var.enable_phone_autoconfirm)
           }
 
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 9999
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
           liveness_probe {
             http_get {
               path = "/health"
@@ -166,10 +193,10 @@ resource "kubernetes_deployment" "auth" {
           resources {
             requests = {
               cpu    = "30m"
-              memory = "100Mi"
+              memory = "64Mi"
             }
             limits = {
-              cpu    = "100m"
+              cpu    = "200m"
               memory = "256Mi"
             }
           }
@@ -177,6 +204,8 @@ resource "kubernetes_deployment" "auth" {
       }
     }
   }
+
+  depends_on = [kubernetes_deployment.db]
 }
 
 resource "kubernetes_service" "auth" {
@@ -195,7 +224,6 @@ resource "kubernetes_service" "auth" {
 }
 
 # --- PostgREST ---
-# Per-tenant instance with static DB connection to tenant_{id} database.
 
 resource "kubernetes_deployment" "rest" {
   metadata {
@@ -218,7 +246,7 @@ resource "kubernetes_deployment" "rest" {
       spec {
         container {
           name    = "rest"
-          image   = "postgrest/postgrest:v14.8"
+          image   = "postgrest/postgrest:v14.17"
           command = ["postgrest"]
 
           port {
@@ -247,11 +275,20 @@ resource "kubernetes_deployment" "rest" {
             value = "anon"
           }
           env {
+            name  = "PGRST_ADMIN_SERVER_PORT"
+            value = "3001"
+          }
+          env {
+            name  = "PGRST_ADMIN_SERVER_HOST"
+            value = "localhost"
+          }
+          # Symmetric secret, or the JWKS when asymmetric keys are configured
+          env {
             name = "PGRST_JWT_SECRET"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.tenant_config.metadata[0].name
-                key  = "JWT_SECRET"
+                key  = "PGRST_JWT_SECRET"
               }
             }
           }
@@ -260,26 +297,39 @@ resource "kubernetes_deployment" "rest" {
             value = "false"
           }
           env {
-            name = "PGRST_APP_SETTINGS_JWT_SECRET"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret.tenant_config.metadata[0].name
-                key  = "JWT_SECRET"
-              }
-            }
-          }
-          env {
             name  = "PGRST_APP_SETTINGS_JWT_EXP"
             value = tostring(var.jwt_expiry)
+          }
+
+          # `postgrest --ready` queries the admin server on localhost:3001
+          readiness_probe {
+            exec {
+              command = ["postgrest", "--ready"]
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
+          # Not --ready: that fails while the database is down, and restarting
+          # PostgREST doesn't help it reconnect.
+          liveness_probe {
+            tcp_socket {
+              port = 3000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 3
           }
 
           resources {
             requests = {
               cpu    = "30m"
-              memory = "100Mi"
+              memory = "64Mi"
             }
             limits = {
-              cpu    = "100m"
+              cpu    = "200m"
               memory = "256Mi"
             }
           }
@@ -287,6 +337,8 @@ resource "kubernetes_deployment" "rest" {
       }
     }
   }
+
+  depends_on = [kubernetes_deployment.db]
 }
 
 resource "kubernetes_service" "rest" {
@@ -305,8 +357,8 @@ resource "kubernetes_service" "rest" {
 }
 
 # --- Storage API ---
-# Per-tenant instance using S3 backend (DO Spaces).
-# Each tenant's files are stored under s3://{bucket}/tenants/{tenant-id}/
+# S3 backend (DO Spaces). Each tenant's files live under
+# s3://{bucket}/tenants/{tenant-id}/.
 
 resource "kubernetes_deployment" "storage" {
   metadata {
@@ -329,7 +381,7 @@ resource "kubernetes_deployment" "storage" {
       spec {
         container {
           name  = "storage"
-          image = "supabase/storage-api:v1.48.26"
+          image = "supabase/storage-api:v1.74.0"
 
           port {
             container_port = 5000
@@ -358,6 +410,7 @@ resource "kubernetes_deployment" "storage" {
             name  = "POSTGREST_URL"
             value = "http://rest:3000"
           }
+          # Legacy symmetric HS256 key
           env {
             name = "AUTH_JWT_SECRET"
             value_from {
@@ -367,9 +420,22 @@ resource "kubernetes_deployment" "storage" {
               }
             }
           }
+          # JWKS for token verification (EC public + legacy symmetric)
+          dynamic "env" {
+            for_each = local.jwt_jwks_enabled ? [1] : []
+            content {
+              name = "JWT_JWKS"
+              value_from {
+                secret_key_ref {
+                  name = kubernetes_secret.tenant_config.metadata[0].name
+                  key  = "JWT_JWKS"
+                }
+              }
+            }
+          }
           env {
             name  = "DATABASE_URL"
-            value = local.db_uri_storage
+            value = local.db_uri_stor
           }
           env {
             name  = "STORAGE_PUBLIC_URL"
@@ -437,7 +503,7 @@ resource "kubernetes_deployment" "storage" {
           # ImgProxy runs in the shared namespace
           env {
             name  = "IMGPROXY_URL"
-            value = "http://${var.shared_imgproxy_host}:5001"
+            value = "http://${local.imgproxy_host}:5001"
           }
           env {
             name = "S3_PROTOCOL_ACCESS_KEY_ID"
@@ -458,6 +524,16 @@ resource "kubernetes_deployment" "storage" {
             }
           }
 
+          readiness_probe {
+            http_get {
+              path = "/status"
+              port = 5000
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
           liveness_probe {
             http_get {
               path = "/status"
@@ -475,7 +551,7 @@ resource "kubernetes_deployment" "storage" {
               memory = "128Mi"
             }
             limits = {
-              cpu    = "150m"
+              cpu    = "300m"
               memory = "384Mi"
             }
           }
@@ -483,6 +559,8 @@ resource "kubernetes_deployment" "storage" {
       }
     }
   }
+
+  depends_on = [kubernetes_deployment.db]
 }
 
 resource "kubernetes_service" "storage" {
@@ -500,8 +578,112 @@ resource "kubernetes_service" "storage" {
   }
 }
 
+# --- Meta (PG Meta) ---
+# Per tenant, connected to the tenant's own database. The gateway only lets
+# the service_role/secret key reach it (/pg/).
+
+resource "kubernetes_deployment" "meta" {
+  metadata {
+    name      = "meta"
+    namespace = kubernetes_namespace.tenant.metadata[0].name
+    labels    = { app = "meta", "tenant-id" = var.tenant_id }
+  }
+
+  spec {
+    replicas = 1
+    selector {
+      match_labels = { app = "meta" }
+    }
+
+    template {
+      metadata {
+        labels = { app = "meta", "tenant-id" = var.tenant_id }
+      }
+
+      spec {
+        container {
+          name  = "meta"
+          image = "supabase/postgres-meta:v0.99.0"
+
+          port {
+            container_port = 8080
+            protocol       = "TCP"
+          }
+
+          env {
+            name  = "PG_META_PORT"
+            value = "8080"
+          }
+          env {
+            name  = "PG_META_DB_HOST"
+            value = local.db_host
+          }
+          env {
+            name  = "PG_META_DB_PORT"
+            value = tostring(local.db_port)
+          }
+          env {
+            name  = "PG_META_DB_NAME"
+            value = local.db_name
+          }
+          env {
+            name  = "PG_META_DB_USER"
+            value = "postgres"
+          }
+          env {
+            name = "PG_META_DB_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "POSTGRES_PASSWORD"
+              }
+            }
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 8080
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
+          resources {
+            requests = {
+              cpu    = "20m"
+              memory = "64Mi"
+            }
+            limits = {
+              cpu    = "200m"
+              memory = "256Mi"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.db]
+}
+
+resource "kubernetes_service" "meta" {
+  metadata {
+    name      = "meta"
+    namespace = kubernetes_namespace.tenant.metadata[0].name
+  }
+  spec {
+    selector = { app = "meta" }
+    port {
+      port        = 8080
+      target_port = 8080
+    }
+    type = "ClusterIP"
+  }
+}
+
 # --- Edge Functions ---
-# Per-tenant Deno edge runtime with tenant-specific function files.
 
 resource "kubernetes_deployment" "functions" {
   metadata {
@@ -522,16 +704,22 @@ resource "kubernetes_deployment" "functions" {
     template {
       metadata {
         labels = { app = "functions", "tenant-id" = var.tenant_id }
+        annotations = {
+          "checksum/config" = sha256(jsonencode(kubernetes_config_map.functions_init.data))
+        }
       }
 
       spec {
-        # Init container seeds the PVC with default edge functions on first deploy
+        # The main router is template-owned and refreshed on every start, so
+        # upstream fixes reach existing volumes. hello/ and deno.jsonc (the
+        # import map main uses for every function) are only seeded once, so
+        # tenant changes survive.
         init_container {
           name  = "init-functions"
           image = "busybox:1.36"
           command = [
             "sh", "-c",
-            "mkdir -p /functions/main /functions/hello && cp -n /init/main-index.ts /functions/main/index.ts 2>/dev/null; cp -n /init/hello-index.ts /functions/hello/index.ts 2>/dev/null; true"
+            "mkdir -p /functions/main /functions/hello && cp /init/main-index.ts /functions/main/index.ts && cp -n /init/hello-index.ts /functions/hello/index.ts && cp -n /init/deno.jsonc /functions/deno.jsonc"
           ]
 
           volume_mount {
@@ -546,15 +734,20 @@ resource "kubernetes_deployment" "functions" {
         }
 
         container {
-          name    = "functions"
-          image   = "supabase/edge-runtime:v1.71.2"
-          command = ["start", "--main-service", "/home/deno/functions/main"]
+          name  = "functions"
+          image = "supabase/edge-runtime:v1.76.2"
+          command = [
+            "start",
+            "--user-worker-request-idle-timeout", "150000",
+            "--main-service", "/home/deno/functions/main"
+          ]
 
           port {
             container_port = 9000
             protocol       = "TCP"
           }
 
+          # Legacy symmetric HS256 key
           env {
             name = "JWT_SECRET"
             value_from {
@@ -564,15 +757,28 @@ resource "kubernetes_deployment" "functions" {
               }
             }
           }
-          # Internal URL goes through the tenant router in the shared namespace
+          # JWKS for token verification (EC public + legacy symmetric)
+          dynamic "env" {
+            for_each = local.jwt_jwks_enabled ? [1] : []
+            content {
+              name = "SUPABASE_JWKS"
+              value_from {
+                secret_key_ref {
+                  name = kubernetes_secret.tenant_config.metadata[0].name
+                  key  = "JWT_JWKS"
+                }
+              }
+            }
+          }
           env {
             name  = "SUPABASE_URL"
-            value = local.api_url
+            value = local.internal_api_url
           }
           env {
             name  = "SUPABASE_PUBLIC_URL"
             value = local.api_url
           }
+          # Legacy API keys (HS256-signed JWTs)
           env {
             name = "SUPABASE_ANON_KEY"
             value_from {
@@ -591,12 +797,13 @@ resource "kubernetes_deployment" "functions" {
               }
             }
           }
+          # New opaque API keys, as JSON maps ({"default":"sb_..."})
           env {
             name = "SUPABASE_PUBLISHABLE_KEYS"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.tenant_config.metadata[0].name
-                key  = "SUPABASE_PUBLISHABLE_KEY"
+                key  = "SUPABASE_PUBLISHABLE_KEYS"
               }
             }
           }
@@ -605,13 +812,14 @@ resource "kubernetes_deployment" "functions" {
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.tenant_config.metadata[0].name
-                key  = "SUPABASE_SECRET_KEY"
+                key  = "SUPABASE_SECRET_KEYS"
               }
             }
           }
+          # The tenant's own database, as on the platform
           env {
             name  = "SUPABASE_DB_URL"
-            value = local.db_uri_funcs
+            value = local.db_uri_fn
           }
           env {
             name  = "VERIFY_JWT"
@@ -622,15 +830,38 @@ resource "kubernetes_deployment" "functions" {
             name       = "functions-data"
             mount_path = "/home/deno/functions"
           }
+          volume_mount {
+            name       = "deno-cache"
+            mount_path = "/root/.cache/deno"
+          }
+
+          readiness_probe {
+            tcp_socket {
+              port = 9000
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
+          liveness_probe {
+            tcp_socket {
+              port = 9000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 3
+          }
 
           resources {
             requests = {
               cpu    = "40m"
-              memory = "100Mi"
+              memory = "128Mi"
             }
             limits = {
-              cpu    = "150m"
-              memory = "384Mi"
+              cpu    = "500m"
+              memory = "512Mi"
             }
           }
         }
@@ -648,6 +879,11 @@ resource "kubernetes_deployment" "functions" {
             name = kubernetes_config_map.functions_init.metadata[0].name
           }
         }
+
+        volume {
+          name = "deno-cache"
+          empty_dir {}
+        }
       }
     }
   }
@@ -663,6 +899,187 @@ resource "kubernetes_service" "functions" {
     port {
       port        = 9000
       target_port = 9000
+    }
+    type = "ClusterIP"
+  }
+}
+
+# --- API Gateway (Envoy) ---
+# Upstream's gateway config, per tenant: API key checks, sb_ key translation,
+# CORS and the route restrictions (e.g. no anon access to /rest/v1/ or the
+# Realtime tenants API) behave exactly as on a single-tenant deployment. The
+# shared tenant router forwards {tenant-id}.{api_domain} here.
+
+resource "kubernetes_deployment" "api_gw" {
+  metadata {
+    name      = "api-gw"
+    namespace = kubernetes_namespace.tenant.metadata[0].name
+    labels    = { app = "api-gw", "tenant-id" = var.tenant_id }
+  }
+
+  spec {
+    replicas = 1
+    selector {
+      match_labels = { app = "api-gw" }
+    }
+
+    template {
+      metadata {
+        labels = { app = "api-gw", "tenant-id" = var.tenant_id }
+        annotations = {
+          "checksum/config" = sha256(jsonencode(kubernetes_config_map.envoy_config.data))
+        }
+      }
+
+      spec {
+        container {
+          name  = "api-gw"
+          image = "envoyproxy/envoy:v1.39.1"
+
+          port {
+            container_port = 8000
+            protocol       = "TCP"
+          }
+
+          env {
+            name = "ANON_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "ANON_KEY"
+              }
+            }
+          }
+          env {
+            name = "SERVICE_ROLE_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "SERVICE_ROLE_KEY"
+              }
+            }
+          }
+          env {
+            name = "SUPABASE_PUBLISHABLE_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "SUPABASE_PUBLISHABLE_KEY"
+              }
+            }
+          }
+          env {
+            name = "SUPABASE_SECRET_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "SUPABASE_SECRET_KEY"
+              }
+            }
+          }
+          env {
+            name = "ANON_KEY_ASYMMETRIC"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "ANON_KEY_ASYMMETRIC"
+              }
+            }
+          }
+          env {
+            name = "SERVICE_ROLE_KEY_ASYMMETRIC"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "SERVICE_ROLE_KEY_ASYMMETRIC"
+              }
+            }
+          }
+          env {
+            name  = "SUPABASE_PUBLIC_URL"
+            value = local.api_url
+          }
+          env {
+            name  = "DASHBOARD_USERNAME"
+            value = "supabase"
+          }
+          env {
+            name = "DASHBOARD_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.tenant_config.metadata[0].name
+                key  = "DASHBOARD_PASSWORD"
+              }
+            }
+          }
+
+          volume_mount {
+            name       = "envoy-config"
+            mount_path = "/etc/envoy-config"
+            read_only  = true
+          }
+
+          # The entrypoint writes lds.yaml next to the other configs, so they
+          # are copied out of the read-only ConfigMap mount first.
+          command = [
+            "/bin/sh", "-c",
+            "cp /etc/envoy-config/envoy.yaml /etc/envoy-config/cds.yaml /etc/envoy-config/lds.template.yaml /etc/envoy/ && exec /bin/sh /etc/envoy-config/docker-entrypoint.sh"
+          ]
+
+          # TCP check, as upstream: the image has no curl or wget
+          readiness_probe {
+            tcp_socket {
+              port = 8000
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
+          liveness_probe {
+            tcp_socket {
+              port = 8000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 3
+          }
+
+          resources {
+            requests = {
+              cpu    = "20m"
+              memory = "64Mi"
+            }
+            limits = {
+              cpu    = "300m"
+              memory = "256Mi"
+            }
+          }
+        }
+
+        volume {
+          name = "envoy-config"
+          config_map {
+            name = kubernetes_config_map.envoy_config.metadata[0].name
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "api_gw" {
+  metadata {
+    name      = "api-gw"
+    namespace = kubernetes_namespace.tenant.metadata[0].name
+  }
+  spec {
+    selector = { app = "api-gw" }
+    port {
+      name        = "http"
+      port        = 8000
+      target_port = 8000
     }
     type = "ClusterIP"
   }

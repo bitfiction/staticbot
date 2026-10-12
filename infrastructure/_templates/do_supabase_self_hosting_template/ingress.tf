@@ -89,7 +89,7 @@ resource "kubernetes_manifest" "letsencrypt_issuer" {
 }
 
 # --- Ingress rules ---
-# Routes external traffic to Kong (API gateway) which handles all Supabase routing.
+# Routes external traffic to the API gateway (Envoy), which handles all Supabase routing.
 
 resource "kubernetes_ingress_v1" "supabase" {
   metadata {
@@ -118,14 +118,14 @@ resource "kubernetes_ingress_v1" "supabase" {
       host = var.domain_name
 
       http {
-        # All traffic goes to Kong — Kong handles internal routing
+        # All traffic goes to the API gateway, which routes internally
         # to auth, rest, realtime, storage, functions, studio, meta
         path {
           path      = "/"
           path_type = "Prefix"
           backend {
             service {
-              name = kubernetes_service.kong.metadata[0].name
+              name = kubernetes_service.api_gw.metadata[0].name
               port {
                 number = 8000
               }

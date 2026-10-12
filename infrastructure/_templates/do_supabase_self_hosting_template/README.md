@@ -1,6 +1,6 @@
 # DigitalOcean Supabase Self-Hosting Template
 
-Deploys a full Supabase stack on DigitalOcean Kubernetes (DOKS). All 13 services run as K8s Deployments with nginx-ingress for TLS termination and cert-manager for automatic Let's Encrypt certificates.
+Deploys a full Supabase stack on DigitalOcean Kubernetes (DOKS), ported from upstream's `docker/docker-compose.yml` plus `docker-compose.logs.yml`. nginx-ingress terminates TLS (cert-manager, Let's Encrypt) and forwards everything to the Envoy API gateway.
 
 Estimated cost: ~$60-70/mo (single s-4vcpu-8gb node + DO Load Balancer).
 
@@ -36,34 +36,54 @@ The `backend_override.tf` file is gitignored (`*_override.tf` pattern). It overr
 ## Architecture
 
 ```
-Internet → DO Load Balancer → nginx-ingress → Kong (API Gateway) → Supabase services
-                                            → Studio (Dashboard)
+Internet → DO Load Balancer → nginx-ingress → Envoy (api-gw) → Supabase services
+                                                             → Studio (basic auth)
 ```
 
-All services run in a `supabase` K8s namespace. Inter-service communication uses K8s DNS (e.g. `db.supabase.svc.cluster.local`).
+All services run in a `supabase` K8s namespace and reach each other by Service name (`db`, `auth`, `rest`, …), like the compose service names.
 
 ### Services
 
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
-| PostgreSQL | supabase/postgres:15.8.1.085 | 5432 | Database (custom extensions) |
-| Kong | kong/kong:3.9.1 | 8000 | API gateway, routing |
-| Auth (GoTrue) | supabase/gotrue:v2.186.0 | 9999 | Authentication |
-| PostgREST | postgrest/postgrest:v14.6 | 3000 | Auto-generated REST API |
-| Realtime | supabase/realtime:v2.76.5 | 4000 | WebSocket subscriptions |
-| Storage + ImgProxy | supabase/storage-api:v1.44.2 + darthsim/imgproxy:v3.30.1 | 5000/5001 | File storage (shared pod) |
-| Studio | supabase/studio:2026.03.16-sha-5528817 | 3000 | Dashboard UI |
-| Meta | supabase/postgres-meta:v0.95.2 | 8080 | Database management API |
-| Analytics | supabase/logflare:1.31.2 | 4000 | Log analytics |
-| Functions | supabase/edge-runtime:v1.71.2 | 9000 | Edge functions (Deno) |
-| Supavisor | supabase/supavisor:2.7.4 | 5432/6543 | Connection pooler |
-| Vector | timberio/vector:0.53.0-alpine | 9001 | Log forwarding |
+| PostgreSQL | supabase/postgres:17.6.1.136 (15.8.1.085 with `postgres_version = "15"`) | 5432 | Database |
+| API gateway | envoyproxy/envoy:v1.39.1 | 8000 | Routing, API key checks, `sb_` key translation |
+| Auth (GoTrue) | supabase/gotrue:v2.196.0 | 9999 | Authentication |
+| PostgREST | postgrest/postgrest:v14.17 | 3000 | Auto-generated REST API |
+| Realtime | supabase/realtime:v2.134.10 | 4000 | WebSocket subscriptions |
+| Storage + ImgProxy | supabase/storage-api:v1.74.0 + darthsim/imgproxy:v3.31.4 | 5000/5001 | File storage (shared pod) |
+| Studio | supabase/studio:2026.09.07-sha-7996410 | 3000 | Dashboard UI |
+| Meta | supabase/postgres-meta:v0.99.0 | 8080 | Database management API |
+| Analytics | supabase/logflare:1.50.10 | 4000 | Log analytics (Studio Logs Explorer) |
+| Functions | supabase/edge-runtime:v1.76.2 | 9000 | Edge functions (Deno) |
+| Supavisor | supabase/supavisor:2.9.12 | 5432/6543 | Connection pooler |
+| Vector | timberio/vector:0.53.0-alpine (DaemonSet) | 9001 | Log forwarding |
+
+### How it differs from docker-compose
+
+These are the Kubernetes adaptations; everything else follows upstream.
+
+- **Postgres init scripts** are mounted file by file into `init-scripts/` and `migrations/`, next to the image's own scripts. (Mounting a ConfigMap over a whole directory hides the image's 40+ migrations, including the one that removes `postgres`'s superuser role.)
+- **`/etc/postgresql-custom`** (included config + the pgsodium/Vault root key) is persisted on the db PVC and seeded from the image by an init container, like compose's `db-config` volume. PGDATA lives in a `pgdata/` subdirectory because block-storage volumes have `lost+found` at their root.
+- **Envoy** gets upstream's config unchanged except the Realtime cluster address (`realtime` Service). The Host header rewrite to `realtime-dev.supabase-realtime` stays, because Realtime takes its tenant ID from it.
+- **Vector** runs upstream's `vector.yml` with the `docker_logs` source swapped for `kubernetes_logs` (see `k8s-namespace.tf`), as a DaemonSet so it sees pods on every node.
+- **Edge Functions**: an init container copies `main/` on every start (template-owned router) and seeds `hello/` and `deno.jsonc` once.
+- **Studio** stores SQL snippets on a small PVC. `EDGE_FUNCTIONS_MANAGEMENT_FOLDER` isn't set: the functions volume is ReadWriteOnce and belongs to the functions pod.
 
 ### Storage
 
-- **PostgreSQL data**: 10Gi DO Block Storage PVC
-- **Storage files**: 10Gi DO Block Storage PVC (shared between Storage and ImgProxy via multi-container pod)
-- **Functions**: 1Gi DO Block Storage PVC (seeded with default functions via init container)
+- **PostgreSQL**: 10Gi DO Block Storage PVC (`pgdata/` + `postgresql-custom/`)
+- **Storage files**: 10Gi PVC (shared between Storage and ImgProxy via multi-container pod)
+- **Functions**: 1Gi PVC
+- **Studio snippets**: 1Gi PVC
+
+## Configuration notes
+
+- `api_external_url` is optional. Since self-hosted 0.7.0 it includes `/auth/v1` (e.g. `https://supabase.example.com/auth/v1`); a value without it (the old form) gets it appended.
+- `postgres_version` defaults to `"17"`. An existing PG15 data directory needs `"15"` until it's upgraded with `docker/utils/upgrade-pg17.sh`.
+- `realtime_db_enc_key` defaults to upstream's fallback `supabaserealtime`; set a random 16-character value for new deployments (`openssl rand -hex 8`).
+- New API keys: set `supabase_publishable_key`, `supabase_secret_key`, `anon_key_asymmetric`, `service_role_key_asymmetric`, `jwt_keys` and `jwt_jwks`, as generated by `docker/utils/add-new-auth-keys.sh`.
+- `pgrst_db_schemas` no longer includes `storage`, matching upstream.
 
 ## Production Use (via Staticbot)
 
@@ -77,69 +97,67 @@ tofu init -backend-config=backend.hcl
 
 | File | Purpose |
 |------|---------|
-| `main.tf` | Providers (DO, K8s, Helm) |
+| `main.tf` | Providers (DO, K8s, Helm), locals (image per Postgres major, URLs) |
 | `variables.tf` | All configurable variables |
 | `backend.tf` | S3 backend (DO Spaces, for production) |
 | `backend_override.tf.local` | Local backend template (copy to `backend_override.tf` for local testing) |
 | `backend.hcl` | DO Spaces backend config template |
 | `network.tf` | DO VPC |
 | `cluster.tf` | DOKS cluster + node pool |
-| `storage.tf` | PVCs (db, storage, functions) |
-| `k8s-namespace.tf` | Namespace, Secrets, ConfigMaps, RBAC |
+| `storage.tf` | PVCs (db, storage, functions, studio snippets) |
+| `k8s-namespace.tf` | Namespace, Secret, ConfigMaps (init SQL, Envoy, pooler, Vector, functions), RBAC |
 | `k8s-services-data.tf` | PostgreSQL, Vector |
 | `k8s-services-core.tf` | Auth, PostgREST, Realtime, Storage+ImgProxy |
-| `k8s-services-gateway.tf` | Kong, Studio, Meta, Analytics, Functions, Supavisor |
+| `k8s-services-gateway.tf` | Envoy, Studio, Meta, Analytics, Functions, Supavisor |
 | `ingress.tf` | nginx-ingress, cert-manager, Ingress rules |
 | `outputs.tf` | Cluster endpoint, URLs, LB IP |
-| `docker/` | Shared config files (kong.yml, SQL init scripts, vector.yml, pooler.exs, edge functions) |
+| `docker/` | Mirror of upstream `supabase/supabase` `docker/` — never edit by hand; `supabase-sync.py` overwrites it |
 
 ## Upstream Sync
 
-All Supabase image versions and config files come from the upstream `supabase/supabase` repo (`docker/` directory). A sync script keeps all 4 templates in sync at once:
+Image versions and config files come from upstream `supabase/supabase` (`docker/`), via the `bitfiction/supabase` fork checkout at `~/Dev/Workspaces/supabot/supabase` (`upstream` remote = `supabase/supabase`). One script keeps all 4 templates in sync:
 
 - **DO Single-Tenant** (this template)
 - **AWS Single-Tenant** (`aws_supabase_self_hosting_template/`)
 - **Multi-Tenant Shared** (`staticbot-control-center/infra/digitalocean/modules-tenants/shared/`)
-- **Multi-Tenant Per-Tenant** (`do_supabase_multi_tenant_tenant/`)
+- **Multi-Tenant Per-Tenant** (`do_supabase_multi_tenant_template/`)
 
 ### Monthly Sync Workflow
 
 ```bash
-# 1. Pull latest upstream
-cd ~/Dev/Workspaces/staticbot/supabase/supabase && git pull
+# 1. Pull latest upstream into the fork checkout
+git -C ~/Dev/Workspaces/supabot/supabase pull --ff-only upstream master
 
-# 2. See what changed
+# 2. See what changed since the last sync (recorded in scripts/supabase-sync.state.json)
 cd ~/Dev/Workspaces/staticbot/staticbot
 python scripts/supabase-sync.py detect
 
-# 3. Auto-apply safe image bumps (all 4 templates at once)
+# 3. Port the TIER 2-4 items detect lists (env vars, compose changes, Envoy
+#    config, SQL) into the Terraform by hand — detect prints the commits.
+
+# 4. Apply image bumps and refresh every template's docker/ copy
 python scripts/supabase-sync.py apply --safe
 
-# 4. Review any TIER 2+ changes flagged by detect (env vars, config files, etc.)
-#    These need manual review — the detect output tells you what and where.
-
-# 5. Generate versions.md changelog entry
+# 5. Print the image changelog for the commit message
 python scripts/supabase-sync.py report
 
-# 6. Validate
+# 6. Validate (from a copy with backend_override.tf if this dir has remote state)
 cd infrastructure/_templates/do_supabase_self_hosting_template && tofu validate
 cd ../aws_supabase_self_hosting_template && tofu validate
+cd ../do_supabase_multi_tenant_template && tofu validate
 
-# 7. Commit
-cd ~/Dev/Workspaces/staticbot/staticbot
-git add -A && git commit -m "chore: sync Supabase upstream YYYY-MM-DD"
-# Also commit any changes in staticbot-control-center if MT shared was updated
+# 7. Commit (also staticbot-control-center if the MT shared module changed)
 ```
 
 ### Risk Tiers
 
 | Tier | What | Action |
 |------|------|--------|
-| 1 — Auto-safe | Image tag bumps | `apply --safe` handles it |
-| 2 — Review-light | New optional env vars, minor config changes | Quick glance, then apply manually |
-| 3 — Review-required | New mandatory env vars, kong.yml changes, SQL init changes | Human review + testing |
-| 4 — Breaking | New services, Postgres upgrade, Kong→Envoy | Planning needed |
+| 1 — Auto-safe | Image tag bumps within a version track (Postgres majors never cross) | `apply --safe` handles it |
+| 2 — Review-light | New optional env vars, minor config changes | Quick glance, then port manually |
+| 3 — Review-required | Compose/env changes, Envoy config, SQL init changes | Human review + testing |
+| 4 — Breaking | New services, retired images, a Postgres major the template pins disappearing | Planning needed |
 
 ### Version History
 
-See `docker/versions.md` for the full changelog of image version updates.
+`docker/versions.md` and `docker/CHANGELOG.md` are upstream's changelogs (overwritten on every sync).

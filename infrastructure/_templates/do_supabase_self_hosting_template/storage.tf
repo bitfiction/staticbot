@@ -47,3 +47,20 @@ resource "kubernetes_persistent_volume_claim" "functions_data" {
     }
   }
 }
+
+# Studio's local SQL snippets (SNIPPETS_MANAGEMENT_FOLDER)
+resource "kubernetes_persistent_volume_claim" "studio_snippets" {
+  metadata {
+    name      = "studio-snippets"
+    namespace = kubernetes_namespace.supabase.metadata[0].name
+  }
+  spec {
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = "do-block-storage"
+    resources {
+      requests = {
+        storage = "1Gi"
+      }
+    }
+  }
+}

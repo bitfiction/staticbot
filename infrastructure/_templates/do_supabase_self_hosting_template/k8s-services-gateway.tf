@@ -1,71 +1,41 @@
-# --- Kong (API Gateway) ---
+# --- API Gateway (Envoy) ---
+# Upstream's default gateway since self-hosted 0.8.0 (Kong is deprecated).
+# docker-entrypoint.sh renders lds.template.yaml with the API keys and the
+# Studio basic-auth credentials, then execs Envoy.
 
-resource "kubernetes_deployment" "kong" {
+resource "kubernetes_deployment" "api_gw" {
   metadata {
-    name      = "kong"
+    name      = "api-gw"
     namespace = kubernetes_namespace.supabase.metadata[0].name
-    labels    = { app = "kong" }
+    labels    = { app = "api-gw" }
   }
 
   spec {
     replicas = 1
     selector {
-      match_labels = { app = "kong" }
+      match_labels = { app = "api-gw" }
     }
 
     template {
       metadata {
-        labels = { app = "kong" }
+        labels = { app = "api-gw" }
+        annotations = {
+          "checksum/config" = sha256(jsonencode(kubernetes_config_map.envoy_config.data))
+        }
       }
 
       spec {
         container {
-          name  = "kong"
-          image = "kong/kong:3.9.1"
+          name  = "api-gw"
+          image = "envoyproxy/envoy:v1.39.1"
 
           port {
             container_port = 8000
             protocol       = "TCP"
           }
-          port {
-            container_port = 8443
-            protocol       = "TCP"
-          }
 
           env {
-            name  = "KONG_DATABASE"
-            value = "off"
-          }
-          env {
-            name  = "KONG_DECLARATIVE_CONFIG"
-            value = "/usr/local/kong/kong.yml"
-          }
-          env {
-            name  = "KONG_DNS_ORDER"
-            value = "LAST,A,CNAME"
-          }
-          env {
-            name  = "KONG_DNS_NOT_FOUND_TTL"
-            value = "1"
-          }
-          env {
-            name  = "KONG_PLUGINS"
-            value = "request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction,post-function"
-          }
-          env {
-            name  = "KONG_NGINX_PROXY_PROXY_BUFFER_SIZE"
-            value = "160k"
-          }
-          env {
-            name  = "KONG_NGINX_PROXY_PROXY_BUFFERS"
-            value = "64 160k"
-          }
-          env {
-            name  = "KONG_PROXY_ACCESS_LOG"
-            value = "/dev/stdout combined"
-          }
-          env {
-            name = "SUPABASE_ANON_KEY"
+            name = "ANON_KEY"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
@@ -74,7 +44,7 @@ resource "kubernetes_deployment" "kong" {
             }
           }
           env {
-            name = "SUPABASE_SERVICE_KEY"
+            name = "SERVICE_ROLE_KEY"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
@@ -119,6 +89,10 @@ resource "kubernetes_deployment" "kong" {
             }
           }
           env {
+            name  = "SUPABASE_PUBLIC_URL"
+            value = var.supabase_public_url
+          }
+          env {
             name  = "DASHBOARD_USERNAME"
             value = var.dashboard_username
           }
@@ -132,45 +106,55 @@ resource "kubernetes_deployment" "kong" {
             }
           }
 
-          # Mount kong config and entrypoint from ConfigMap
           volume_mount {
-            name       = "kong-config"
-            mount_path = "/home/kong/config"
+            name       = "envoy-config"
+            mount_path = "/etc/envoy-config"
             read_only  = true
           }
 
-          # Use entrypoint script from ConfigMap to process env var substitution
+          # The entrypoint writes lds.yaml next to the other configs, so they
+          # are copied out of the read-only ConfigMap mount first.
           command = [
-            "bash", "-c",
-            "cp /home/kong/config/kong.yml /home/kong/temp.yml && cp /home/kong/config/kong-entrypoint.sh /home/kong/kong-entrypoint.sh && chmod +x /home/kong/kong-entrypoint.sh && /home/kong/kong-entrypoint.sh"
+            "/bin/sh", "-c",
+            "cp /etc/envoy-config/envoy.yaml /etc/envoy-config/cds.yaml /etc/envoy-config/lds.template.yaml /etc/envoy/ && exec /bin/sh /etc/envoy-config/docker-entrypoint.sh"
           ]
 
-          liveness_probe {
-            exec {
-              command = ["kong", "health"]
+          # TCP check, as upstream: the image has no curl or wget
+          readiness_probe {
+            tcp_socket {
+              port = 8000
             }
-            initial_delay_seconds = 15
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
+          liveness_probe {
+            tcp_socket {
+              port = 8000
+            }
+            initial_delay_seconds = 10
             period_seconds        = 10
-            timeout_seconds       = 10
+            timeout_seconds       = 5
             failure_threshold     = 3
           }
 
           resources {
             requests = {
-              cpu    = "200m"
-              memory = "512Mi"
+              cpu    = "100m"
+              memory = "128Mi"
             }
             limits = {
               cpu    = "500m"
-              memory = "1Gi"
+              memory = "512Mi"
             }
           }
         }
 
         volume {
-          name = "kong-config"
+          name = "envoy-config"
           config_map {
-            name = kubernetes_config_map.kong_config.metadata[0].name
+            name = kubernetes_config_map.envoy_config.metadata[0].name
           }
         }
       }
@@ -178,22 +162,17 @@ resource "kubernetes_deployment" "kong" {
   }
 }
 
-resource "kubernetes_service" "kong" {
+resource "kubernetes_service" "api_gw" {
   metadata {
-    name      = "kong"
+    name      = "api-gw"
     namespace = kubernetes_namespace.supabase.metadata[0].name
   }
   spec {
-    selector = { app = "kong" }
+    selector = { app = "api-gw" }
     port {
       name        = "http"
       port        = 8000
       target_port = 8000
-    }
-    port {
-      name        = "https"
-      port        = 8443
-      target_port = 8443
     }
     type = "ClusterIP"
   }
@@ -210,6 +189,9 @@ resource "kubernetes_deployment" "studio" {
 
   spec {
     replicas = 1
+    strategy {
+      type = "Recreate" # snippets PVC is ReadWriteOnce
+    }
     selector {
       match_labels = { app = "studio" }
     }
@@ -222,13 +204,14 @@ resource "kubernetes_deployment" "studio" {
       spec {
         container {
           name  = "studio"
-          image = "supabase/studio:2026.04.27-sha-5f60601"
+          image = "supabase/studio:2026.09.07-sha-7996410"
 
           port {
             container_port = 3000
             protocol       = "TCP"
           }
 
+          # Listen on all IPv4 interfaces
           env {
             name  = "HOSTNAME"
             value = "0.0.0.0"
@@ -257,6 +240,11 @@ resource "kubernetes_deployment" "studio" {
                 key  = "POSTGRES_PASSWORD"
               }
             }
+          }
+          # See: https://supabase.com/docs/guides/self-hosting/remove-superuser-access
+          env {
+            name  = "POSTGRES_USER_READ_WRITE"
+            value = "postgres"
           }
           env {
             name = "PG_META_CRYPTO_KEY"
@@ -298,7 +286,7 @@ resource "kubernetes_deployment" "studio" {
           }
           env {
             name  = "SUPABASE_URL"
-            value = "http://kong:8000"
+            value = local.internal_api_url
           }
           env {
             name  = "SUPABASE_PUBLIC_URL"
@@ -332,23 +320,24 @@ resource "kubernetes_deployment" "studio" {
             }
           }
           env {
-            name = "LOGFLARE_API_KEY"
+            name = "SUPABASE_PUBLISHABLE_KEY"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
-                key  = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
+                key  = "SUPABASE_PUBLISHABLE_KEY"
               }
             }
           }
           env {
-            name = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
+            name = "SUPABASE_SECRET_KEY"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
-                key  = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
+                key  = "SUPABASE_SECRET_KEY"
               }
             }
           }
+          # Logs Explorer, as in upstream docker-compose.logs.yml
           env {
             name = "LOGFLARE_PRIVATE_ACCESS_TOKEN"
             value_from {
@@ -363,12 +352,39 @@ resource "kubernetes_deployment" "studio" {
             value = "http://analytics:4000"
           }
           env {
-            name  = "NEXT_PUBLIC_ENABLE_LOGS"
+            name  = "ENABLED_FEATURES_LOGS_ALL"
             value = "true"
           }
           env {
-            name  = "NEXT_ANALYTICS_BACKEND_PROVIDER"
-            value = "postgres"
+            name  = "SNIPPETS_MANAGEMENT_FOLDER"
+            value = "/app/snippets"
+          }
+
+          volume_mount {
+            name       = "snippets"
+            mount_path = "/app/snippets"
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/api/platform/profile"
+              port = 3000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 5
+            timeout_seconds       = 10
+            failure_threshold     = 3
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/api/platform/profile"
+              port = 3000
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 10
+            timeout_seconds       = 10
+            failure_threshold     = 3
           }
 
           resources {
@@ -377,9 +393,16 @@ resource "kubernetes_deployment" "studio" {
               memory = "256Mi"
             }
             limits = {
-              cpu    = "300m"
-              memory = "512Mi"
+              cpu    = "500m"
+              memory = "1Gi"
             }
+          }
+        }
+
+        volume {
+          name = "snippets"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.studio_snippets.metadata[0].name
           }
         }
       }
@@ -425,7 +448,7 @@ resource "kubernetes_deployment" "meta" {
       spec {
         container {
           name  = "meta"
-          image = "supabase/postgres-meta:v0.96.3"
+          image = "supabase/postgres-meta:v0.99.0"
 
           port {
             container_port = 8080
@@ -450,7 +473,7 @@ resource "kubernetes_deployment" "meta" {
           }
           env {
             name  = "PG_META_DB_USER"
-            value = "supabase_admin"
+            value = "postgres"
           }
           env {
             name = "PG_META_DB_PASSWORD"
@@ -469,6 +492,16 @@ resource "kubernetes_deployment" "meta" {
                 key  = "PG_META_CRYPTO_KEY"
               }
             }
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 8080
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
           }
 
           resources {
@@ -503,6 +536,8 @@ resource "kubernetes_service" "meta" {
 }
 
 # --- Analytics (Logflare) ---
+# Upstream moved Logflare + Vector to docker-compose.logs.yml (optional). We
+# always run them so Studio's Logs Explorer works.
 
 resource "kubernetes_deployment" "analytics" {
   metadata {
@@ -525,7 +560,7 @@ resource "kubernetes_deployment" "analytics" {
       spec {
         container {
           name  = "analytics"
-          image = "supabase/logflare:1.36.1"
+          image = "supabase/logflare:1.50.10"
 
           port {
             container_port = 4000
@@ -565,6 +600,16 @@ resource "kubernetes_deployment" "analytics" {
             name  = "DB_SCHEMA"
             value = "_analytics"
           }
+          # Enable single-tenant mode for Logflare
+          env {
+            name  = "LOGFLARE_SINGLE_TENANT"
+            value = "true"
+          }
+          # Seed Supabase-related metadata
+          env {
+            name  = "LOGFLARE_SUPABASE_MODE"
+            value = "true"
+          }
           env {
             name = "LOGFLARE_PUBLIC_ACCESS_TOKEN"
             value_from {
@@ -584,12 +629,8 @@ resource "kubernetes_deployment" "analytics" {
             }
           }
           env {
-            name  = "LOGFLARE_SINGLE_TENANT"
-            value = "true"
-          }
-          env {
-            name  = "LOGFLARE_SUPABASE_MODE"
-            value = "true"
+            name  = "LOGFLARE_FEATURE_FLAG_OVERRIDE"
+            value = "multibackend=true"
           }
           env {
             name  = "POSTGRES_BACKEND_URL"
@@ -599,9 +640,15 @@ resource "kubernetes_deployment" "analytics" {
             name  = "POSTGRES_BACKEND_SCHEMA"
             value = "_analytics"
           }
-          env {
-            name  = "LOGFLARE_FEATURE_FLAG_OVERRIDE"
-            value = "multibackend=true"
+
+          startup_probe {
+            http_get {
+              path = "/health"
+              port = 4000
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 36
           }
 
           liveness_probe {
@@ -609,10 +656,9 @@ resource "kubernetes_deployment" "analytics" {
               path = "/health"
               port = 4000
             }
-            initial_delay_seconds = 30
-            period_seconds        = 10
-            timeout_seconds       = 5
-            failure_threshold     = 10
+            period_seconds    = 10
+            timeout_seconds   = 5
+            failure_threshold = 10
           }
 
           resources {
@@ -667,17 +713,22 @@ resource "kubernetes_deployment" "functions" {
     template {
       metadata {
         labels = { app = "functions" }
+        annotations = {
+          "checksum/config" = sha256(jsonencode(kubernetes_config_map.functions_init.data))
+        }
       }
 
       spec {
-        # Init container seeds the PVC with default edge functions on first deploy.
-        # Uses cp -n (no-clobber) so user-deployed functions are never overwritten.
+        # The main router is template-owned and refreshed on every start, so
+        # upstream fixes reach existing volumes. hello/ and deno.jsonc (the
+        # import map main uses for every function) are only seeded once, so
+        # user changes survive.
         init_container {
           name  = "init-functions"
           image = "busybox:1.36"
           command = [
             "sh", "-c",
-            "mkdir -p /functions/main /functions/hello && cp -n /init/main-index.ts /functions/main/index.ts 2>/dev/null; cp -n /init/hello-index.ts /functions/hello/index.ts 2>/dev/null; true"
+            "mkdir -p /functions/main /functions/hello && cp /init/main-index.ts /functions/main/index.ts && cp -n /init/hello-index.ts /functions/hello/index.ts && cp -n /init/deno.jsonc /functions/deno.jsonc"
           ]
 
           volume_mount {
@@ -692,15 +743,20 @@ resource "kubernetes_deployment" "functions" {
         }
 
         container {
-          name    = "functions"
-          image   = "supabase/edge-runtime:v1.71.2"
-          command = ["start", "--main-service", "/home/deno/functions/main"]
+          name  = "functions"
+          image = "supabase/edge-runtime:v1.76.2"
+          command = [
+            "start",
+            "--user-worker-request-idle-timeout", "150000",
+            "--main-service", "/home/deno/functions/main"
+          ]
 
           port {
             container_port = 9000
             protocol       = "TCP"
           }
 
+          # Legacy symmetric HS256 key
           env {
             name = "JWT_SECRET"
             value_from {
@@ -710,14 +766,28 @@ resource "kubernetes_deployment" "functions" {
               }
             }
           }
+          # JWKS for token verification (EC public + legacy symmetric)
+          dynamic "env" {
+            for_each = local.jwt_jwks_enabled ? [1] : []
+            content {
+              name = "SUPABASE_JWKS"
+              value_from {
+                secret_key_ref {
+                  name = kubernetes_secret.supabase_config.metadata[0].name
+                  key  = "JWT_JWKS"
+                }
+              }
+            }
+          }
           env {
             name  = "SUPABASE_URL"
-            value = "http://kong:8000"
+            value = local.internal_api_url
           }
           env {
             name  = "SUPABASE_PUBLIC_URL"
             value = var.supabase_public_url
           }
+          # Legacy API keys (HS256-signed JWTs)
           env {
             name = "SUPABASE_ANON_KEY"
             value_from {
@@ -736,12 +806,13 @@ resource "kubernetes_deployment" "functions" {
               }
             }
           }
+          # New opaque API keys, as JSON maps ({"default":"sb_..."})
           env {
             name = "SUPABASE_PUBLISHABLE_KEYS"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
-                key  = "SUPABASE_PUBLISHABLE_KEY"
+                key  = "SUPABASE_PUBLISHABLE_KEYS"
               }
             }
           }
@@ -750,7 +821,7 @@ resource "kubernetes_deployment" "functions" {
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
-                key  = "SUPABASE_SECRET_KEY"
+                key  = "SUPABASE_SECRET_KEYS"
               }
             }
           }
@@ -767,6 +838,29 @@ resource "kubernetes_deployment" "functions" {
             name       = "functions-data"
             mount_path = "/home/deno/functions"
           }
+          volume_mount {
+            name       = "deno-cache"
+            mount_path = "/root/.cache/deno"
+          }
+
+          readiness_probe {
+            tcp_socket {
+              port = 9000
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
+          liveness_probe {
+            tcp_socket {
+              port = 9000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 3
+          }
 
           resources {
             requests = {
@@ -774,8 +868,8 @@ resource "kubernetes_deployment" "functions" {
               memory = "256Mi"
             }
             limits = {
-              cpu    = "300m"
-              memory = "512Mi"
+              cpu    = "500m"
+              memory = "1Gi"
             }
           }
         }
@@ -792,6 +886,11 @@ resource "kubernetes_deployment" "functions" {
           config_map {
             name = kubernetes_config_map.functions_init.metadata[0].name
           }
+        }
+
+        volume {
+          name = "deno-cache"
+          empty_dir {}
         }
       }
     }
@@ -831,12 +930,15 @@ resource "kubernetes_deployment" "supavisor" {
     template {
       metadata {
         labels = { app = "supavisor" }
+        annotations = {
+          "checksum/config" = sha256(kubernetes_config_map.pooler_config.data["pooler.exs"])
+        }
       }
 
       spec {
         container {
           name  = "supavisor"
-          image = "supabase/supavisor:2.7.4"
+          image = "supabase/supavisor:2.9.12"
 
           port {
             container_port = 5432
@@ -858,6 +960,11 @@ resource "kubernetes_deployment" "supavisor" {
           env {
             name  = "POSTGRES_PORT"
             value = tostring(var.postgres_port)
+          }
+          # pooler.exs registers the tenant against this host
+          env {
+            name  = "POSTGRES_HOST"
+            value = "db"
           }
           env {
             name  = "POSTGRES_DB"
@@ -957,15 +1064,24 @@ resource "kubernetes_deployment" "supavisor" {
             "/app/bin/migrate && /app/bin/supavisor eval \"$(cat /etc/pooler/pooler.exs)\" && /app/bin/server"
           ]
 
+          startup_probe {
+            http_get {
+              path = "/api/health"
+              port = 4000
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 36
+          }
+
           liveness_probe {
             http_get {
               path = "/api/health"
               port = 4000
             }
-            initial_delay_seconds = 30
-            period_seconds        = 10
-            timeout_seconds       = 5
-            failure_threshold     = 5
+            period_seconds    = 10
+            timeout_seconds   = 5
+            failure_threshold = 5
           }
 
           resources {

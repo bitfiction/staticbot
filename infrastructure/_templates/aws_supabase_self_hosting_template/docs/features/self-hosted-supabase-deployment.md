@@ -14,8 +14,8 @@ The `aws_supabase_self_hosting_template` deploys:
 - **ECS Fargate cluster** with 13 services:
   - Core: Auth (GoTrue), PostgREST, Realtime, Storage, imgproxy
   - Data: PostgreSQL, Vector (log shipping)
-  - Gateway: Kong (API gateway), Studio (dashboard), postgres-meta, Logflare (analytics), Edge Runtime, Supavisor (connection pooler)
-- **ALB** with target groups for Kong (API) and Studio (dashboard)
+  - Gateway: Envoy (API gateway, upstream's default since self-hosted 0.8.0), Studio (dashboard), postgres-meta, Logflare (analytics), Edge Runtime, Supavisor (connection pooler)
+- **ALB** with one target group for the API gateway (Studio is served through it behind basic auth)
 - **EFS** for persistent storage (DB data, storage files, edge functions)
 - **CloudWatch** log groups
 - **Service Discovery** via AWS CloudMap (`supabase.internal` namespace)
@@ -24,7 +24,7 @@ The `aws_supabase_self_hosting_template` deploys:
 
 All services communicate via CloudMap DNS within the private namespace:
 - `db.supabase.internal:5432` — PostgreSQL
-- `kong.supabase.internal:8000` — API Gateway
+- `api-gw.supabase.internal:8000` — API Gateway
 - `rest.supabase.internal:3000` — PostgREST
 - `auth.supabase.internal:9999` — GoTrue
 - `realtime.supabase.internal:4000` — Realtime
@@ -70,14 +70,14 @@ A `Deployment` targeting this Stack follows the existing flow:
 2. `terraform apply` (APPLY) — creates VPC, ECS, ALB, EFS, CloudMap, all 13 services
 
 **SOFTWARE jobs (post-deploy verification):**
-1. `SUPABASE_POST_DEPLOY` job — waits for all ECS services to be healthy, verifies Kong/Studio endpoints, stores connection details
+1. `SUPABASE_POST_DEPLOY` job — waits for all ECS services to be healthy, verifies the API gateway and Studio endpoints, stores connection details
 
 ### 4. Worker Job: SUPABASE_POST_DEPLOY
 
 Runs as a migration job after the Supabase infrastructure is deployed. Responsibilities:
 
 1. **Verify ECS health** — Poll all 13 ECS services until healthy (with timeout)
-2. **Verify API connectivity** — Hit Kong health endpoint via ALB URL
+2. **Verify API connectivity** — Hit `/auth/v1/health` via the ALB URL (with the anon key as `apikey`)
 3. **Verify Studio** — Hit Studio endpoint
 4. **Store connection details** — Save ALB URL, anon key, service role key back to migration record for use by Backend Switchover phase
 
@@ -111,7 +111,7 @@ Each deployment gets its own state file. Use `backend.tf` with per-deployment S3
 Each customer gets their own ECS cluster + VPC. No shared resources between tenants.
 
 ### Opaque API Keys (Optional)
-Kong 3.9+ supports ES256 opaque API keys (`sb_` prefixed) alongside legacy HS256 JWTs. The `kong-entrypoint.sh` script handles translation. When opaque key variables are empty, the system falls back to legacy-only behavior.
+The Envoy gateway supports opaque API keys (`sb_` prefixed) alongside legacy HS256 JWTs and translates them to the ES256 `*_ASYMMETRIC` JWTs. Set `jwt_jwks` (and `jwt_keys` for ES256 user tokens) with them; generate everything with `docker/utils/add-new-auth-keys.sh`. When the opaque key variables are empty, the gateway runs in legacy-only mode.
 
 ## Implementation Steps
 

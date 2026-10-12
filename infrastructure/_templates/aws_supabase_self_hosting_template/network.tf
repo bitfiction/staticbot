@@ -221,55 +221,27 @@ resource "aws_lb_listener" "http" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.kong.arn
+    target_group_arn = aws_lb_target_group.api_gw.arn
   }
 }
 
-# Target Group for Kong (The main gateway)
-resource "aws_lb_target_group" "kong" {
-  name        = "${local.short_name}-kong-tg"
+# Target group for the API gateway (Envoy), which routes all Supabase traffic,
+# including Studio behind basic auth.
+resource "aws_lb_target_group" "api_gw" {
+  name        = "${local.short_name}-apigw-tg"
   port        = 8000
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
 
+  # Every gateway route needs an API key or basic auth, so a 401 on / means
+  # Envoy is up and answering.
   health_check {
-    path                = "/status" # Kong status endpoint
-    matcher             = "200"
+    path                = "/"
+    matcher             = "200-499"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
-  }
-}
-
-# Target Group for Studio (UI) - Optional, might want to route via Kong or separate listener
-resource "aws_lb_target_group" "studio" {
-  name        = "${local.short_name}-studio-tg"
-  port        = 3000
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
-
-  health_check {
-    path = "/api/platform/profile"
-    matcher = "200-401" # 401 might be returned if unauthenticated, which is fine for health check existence
-  }
-}
-
-# We might need a rule to route to Studio based on Host header or Path
-resource "aws_lb_listener_rule" "studio" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.studio.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/studio/*", "/studio"] # Example path routing
-    }
   }
 }

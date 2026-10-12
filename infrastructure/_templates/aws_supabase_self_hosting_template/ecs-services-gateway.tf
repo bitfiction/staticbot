@@ -1,9 +1,27 @@
-# --- Kong ---
+# --- API Gateway (Envoy) ---
+# Upstream's default gateway since self-hosted 0.8.0 (Kong is deprecated).
+# The config files are shipped gzip+base64 in env vars (lds.template.yaml alone
+# is ~55 KB; an ECS task definition is capped at 64 KB) and decoded on start.
+# Cluster addresses use Cloud Map names, since tasks can't resolve bare
+# service names; the Realtime Host header rewrite stays upstream's, because
+# Realtime derives its tenant ID ("realtime-dev") from it.
 
-resource "aws_ecs_service" "kong" {
-  name            = "kong"
+locals {
+  envoy_cds = replace(
+    replace(
+      file("${path.module}/docker/volumes/api/envoy/cds.yaml"),
+      "address: realtime-dev.supabase-realtime",
+      "address: realtime.supabase.internal"
+    ),
+    "/(?m)address: (auth|rest|storage|functions|meta|studio)$/",
+    "address: $1.supabase.internal"
+  )
+}
+
+resource "aws_ecs_service" "api_gw" {
+  name            = "api-gw"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.kong.arn
+  task_definition = aws_ecs_task_definition.api_gw.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
@@ -14,20 +32,20 @@ resource "aws_ecs_service" "kong" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.kong.arn
-    container_name   = "kong"
+    target_group_arn = aws_lb_target_group.api_gw.arn
+    container_name   = "api-gw"
     container_port   = 8000
   }
 
   service_registries {
-    registry_arn = aws_service_discovery_service.kong.arn
+    registry_arn = aws_service_discovery_service.api_gw.arn
   }
 
   depends_on = [aws_lb_listener.http]
 }
 
-resource "aws_service_discovery_service" "kong" {
-  name = "kong"
+resource "aws_service_discovery_service" "api_gw" {
+  name = "api-gw"
   dns_config {
     namespace_id = aws_service_discovery_private_dns_namespace.main.id
     dns_records {
@@ -37,74 +55,73 @@ resource "aws_service_discovery_service" "kong" {
   }
 }
 
-resource "aws_ecs_task_definition" "kong" {
-  family                   = "${local.sanitized_name}-kong"
+resource "aws_ecs_task_definition" "api_gw" {
+  family                   = "${local.sanitized_name}-api-gw"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 512
-  memory                   = 1024
+  cpu                      = 256
+  memory                   = 512
   execution_role_arn       = aws_iam_role.execution_role.arn
   task_role_arn            = aws_iam_role.task_role.arn
 
   container_definitions = jsonencode([
     {
-      name      = "kong"
-      image     = "kong/kong:3.9.1"
+      name      = "api-gw"
+      image     = "envoyproxy/envoy:v1.39.1"
       essential = true
       portMappings = [
         {
           containerPort = 8000
           protocol      = "tcp"
-        },
-        {
-          containerPort = 8443
-          protocol      = "tcp"
         }
       ]
       environment = [
-        { name = "KONG_DATABASE", value = "off" },
-        { name = "KONG_DECLARATIVE_CONFIG", value = "/usr/local/kong/kong.yml" },
-        { name = "KONG_DNS_ORDER", value = "LAST,A,CNAME" },
-        { name = "KONG_DNS_NOT_FOUND_TTL", value = "1" },
-        { name = "KONG_PLUGINS", value = "request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction,post-function" },
-        { name = "KONG_NGINX_PROXY_PROXY_BUFFER_SIZE", value = "160k" },
-        { name = "KONG_NGINX_PROXY_PROXY_BUFFERS", value = "64 160k" },
-        { name = "KONG_PROXY_ACCESS_LOG", value = "/dev/stdout combined" },
-        { name = "SUPABASE_ANON_KEY", value = var.anon_key },
-        { name = "SUPABASE_SERVICE_KEY", value = var.service_role_key },
+        { name = "ANON_KEY", value = var.anon_key },
+        { name = "SERVICE_ROLE_KEY", value = var.service_role_key },
         { name = "SUPABASE_PUBLISHABLE_KEY", value = var.supabase_publishable_key },
         { name = "SUPABASE_SECRET_KEY", value = var.supabase_secret_key },
         { name = "ANON_KEY_ASYMMETRIC", value = var.anon_key_asymmetric },
         { name = "SERVICE_ROLE_KEY_ASYMMETRIC", value = var.service_role_key_asymmetric },
+        { name = "SUPABASE_PUBLIC_URL", value = var.supabase_public_url },
         { name = "DASHBOARD_USERNAME", value = var.dashboard_username },
         { name = "DASHBOARD_PASSWORD", value = var.dashboard_password },
-        # Inject modified config and entrypoint
-        { name = "KONG_CONFIG_TEMPLATE", value = replace(file("${path.module}/docker/volumes/api/kong.yml"), "realtime-dev.supabase-realtime", "realtime.supabase.internal") },
-        { name = "KONG_ENTRYPOINT_SCRIPT", value = file("${path.module}/docker/volumes/api/kong-entrypoint.sh") }
+        { name = "ENVOY_YAML_GZ", value = base64gzip(file("${path.module}/docker/volumes/api/envoy/envoy.yaml")) },
+        { name = "ENVOY_CDS_GZ", value = base64gzip(local.envoy_cds) },
+        { name = "ENVOY_LDS_TEMPLATE_GZ", value = base64gzip(file("${path.module}/docker/volumes/api/envoy/lds.template.yaml")) },
+        { name = "ENVOY_ENTRYPOINT_GZ", value = base64gzip(file("${path.module}/docker/volumes/api/envoy/docker-entrypoint.sh")) }
       ]
+      entryPoint = ["/bin/sh", "-c"]
       command = [
-        "bash", "-c",
-        "echo \"$KONG_ENTRYPOINT_SCRIPT\" > /home/kong/kong-entrypoint.sh && chmod +x /home/kong/kong-entrypoint.sh && echo \"$KONG_CONFIG_TEMPLATE\" > /home/kong/temp.yml && /home/kong/kong-entrypoint.sh"
+        <<-EOT
+        set -e
+        echo "$ENVOY_YAML_GZ" | base64 -d | gunzip > /etc/envoy/envoy.yaml
+        echo "$ENVOY_CDS_GZ" | base64 -d | gunzip > /etc/envoy/cds.yaml
+        echo "$ENVOY_LDS_TEMPLATE_GZ" | base64 -d | gunzip > /etc/envoy/lds.template.yaml
+        echo "$ENVOY_ENTRYPOINT_GZ" | base64 -d | gunzip > /docker-entrypoint.sh
+        exec /bin/sh /docker-entrypoint.sh
+        EOT
       ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.main.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "kong"
+          "awslogs-stream-prefix" = "api-gw"
         }
       }
+      # TCP check, as upstream: the image has no curl or wget
       healthCheck = {
-        command = ["CMD-SHELL", "kong health"]
+        command  = ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/127.0.0.1/8000'"]
         interval = 10
-        timeout = 10
-        retries = 3
+        timeout  = 5
+        retries  = 3
       }
     }
   ])
 }
 
 # --- Studio ---
+# Reached through the API gateway (basic auth), like upstream.
 
 resource "aws_ecs_service" "studio" {
   name            = "studio"
@@ -119,17 +136,9 @@ resource "aws_ecs_service" "studio" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.studio.arn
-    container_name   = "studio"
-    container_port   = 3000
-  }
-
   service_registries {
     registry_arn = aws_service_discovery_service.studio.arn
   }
-
-  depends_on = [aws_lb_listener_rule.studio]
 }
 
 resource "aws_service_discovery_service" "studio" {
@@ -148,14 +157,26 @@ resource "aws_ecs_task_definition" "studio" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
-  memory                   = 512
+  memory                   = 1024
   execution_role_arn       = aws_iam_role.execution_role.arn
   task_role_arn            = aws_iam_role.task_role.arn
+
+  volume {
+    name = "studio-snippets"
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.main.id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.studio_snippets.id
+        iam             = "ENABLED"
+      }
+    }
+  }
 
   container_definitions = jsonencode([
     {
       name      = "studio"
-      image     = "supabase/studio:2026.04.27-sha-5f60601"
+      image     = "supabase/studio:2026.09.07-sha-7996410"
       essential = true
       portMappings = [
         {
@@ -170,6 +191,8 @@ resource "aws_ecs_task_definition" "studio" {
         { name = "POSTGRES_HOST", value = "db.supabase.internal" },
         { name = "POSTGRES_DB", value = var.postgres_db },
         { name = "POSTGRES_PASSWORD", value = var.postgres_password },
+        # See: https://supabase.com/docs/guides/self-hosting/remove-superuser-access
+        { name = "POSTGRES_USER_READ_WRITE", value = "postgres" },
         { name = "PG_META_CRYPTO_KEY", value = var.pg_meta_crypto_key },
         { name = "PGRST_DB_SCHEMAS", value = var.pgrst_db_schemas },
         { name = "PGRST_DB_MAX_ROWS", value = tostring(var.pgrst_db_max_rows) },
@@ -177,17 +200,25 @@ resource "aws_ecs_task_definition" "studio" {
         { name = "DEFAULT_ORGANIZATION_NAME", value = var.studio_default_organization },
         { name = "DEFAULT_PROJECT_NAME", value = var.studio_default_project },
         { name = "OPENAI_API_KEY", value = var.openai_api_key },
-        { name = "SUPABASE_URL", value = "http://kong.supabase.internal:8000" },
+        { name = "SUPABASE_URL", value = local.internal_api_url },
         { name = "SUPABASE_PUBLIC_URL", value = var.supabase_public_url },
         { name = "SUPABASE_ANON_KEY", value = var.anon_key },
         { name = "SUPABASE_SERVICE_KEY", value = var.service_role_key },
         { name = "AUTH_JWT_SECRET", value = var.jwt_secret },
-        { name = "LOGFLARE_API_KEY", value = var.logflare_public_access_token },
-        { name = "LOGFLARE_PUBLIC_ACCESS_TOKEN", value = var.logflare_public_access_token },
+        { name = "SUPABASE_PUBLISHABLE_KEY", value = var.supabase_publishable_key },
+        { name = "SUPABASE_SECRET_KEY", value = var.supabase_secret_key },
+        # Logs Explorer, as in upstream docker-compose.logs.yml
         { name = "LOGFLARE_PRIVATE_ACCESS_TOKEN", value = var.logflare_private_access_token },
         { name = "LOGFLARE_URL", value = "http://analytics.supabase.internal:4000" },
-        { name = "NEXT_PUBLIC_ENABLE_LOGS", value = "true" },
-        { name = "NEXT_ANALYTICS_BACKEND_PROVIDER", value = "postgres" }
+        { name = "ENABLED_FEATURES_LOGS_ALL", value = "true" },
+        { name = "SNIPPETS_MANAGEMENT_FOLDER", value = "/app/snippets" }
+      ]
+      mountPoints = [
+        {
+          sourceVolume  = "studio-snippets"
+          containerPath = "/app/snippets"
+          readOnly      = false
+        }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -196,6 +227,13 @@ resource "aws_ecs_task_definition" "studio" {
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "studio"
         }
+      }
+      healthCheck = {
+        command     = ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})\""]
+        interval    = 5
+        timeout     = 10
+        retries     = 3
+        startPeriod = 20
       }
     }
   ])
@@ -244,7 +282,7 @@ resource "aws_ecs_task_definition" "meta" {
   container_definitions = jsonencode([
     {
       name      = "meta"
-      image     = "supabase/postgres-meta:v0.96.3"
+      image     = "supabase/postgres-meta:v0.99.0"
       essential = true
       portMappings = [
         {
@@ -257,7 +295,7 @@ resource "aws_ecs_task_definition" "meta" {
         { name = "PG_META_DB_HOST", value = "db.supabase.internal" },
         { name = "PG_META_DB_PORT", value = tostring(var.postgres_port) },
         { name = "PG_META_DB_NAME", value = var.postgres_db },
-        { name = "PG_META_DB_USER", value = "supabase_admin" },
+        { name = "PG_META_DB_USER", value = "postgres" },
         { name = "PG_META_DB_PASSWORD", value = var.postgres_password },
         { name = "CRYPTO_KEY", value = var.pg_meta_crypto_key }
       ]
@@ -274,6 +312,7 @@ resource "aws_ecs_task_definition" "meta" {
 }
 
 # --- Analytics (Logflare) ---
+# Upstream moved Logflare + Vector to docker-compose.logs.yml (optional).
 
 resource "aws_ecs_service" "analytics" {
   name            = "analytics"
@@ -316,7 +355,7 @@ resource "aws_ecs_task_definition" "analytics" {
   container_definitions = jsonencode([
     {
       name      = "analytics"
-      image     = "supabase/logflare:1.36.1"
+      image     = "supabase/logflare:1.50.10"
       essential = true
       portMappings = [
         {
@@ -336,9 +375,9 @@ resource "aws_ecs_task_definition" "analytics" {
         { name = "LOGFLARE_PRIVATE_ACCESS_TOKEN", value = var.logflare_private_access_token },
         { name = "LOGFLARE_SINGLE_TENANT", value = "true" },
         { name = "LOGFLARE_SUPABASE_MODE", value = "true" },
+        { name = "LOGFLARE_FEATURE_FLAG_OVERRIDE", value = "multibackend=true" },
         { name = "POSTGRES_BACKEND_URL", value = "postgresql://supabase_admin:${var.postgres_password}@db.supabase.internal:${var.postgres_port}/_supabase" },
-        { name = "POSTGRES_BACKEND_SCHEMA", value = "_analytics" },
-        { name = "LOGFLARE_FEATURE_FLAG_OVERRIDE", value = "multibackend=true" }
+        { name = "POSTGRES_BACKEND_SCHEMA", value = "_analytics" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -349,16 +388,25 @@ resource "aws_ecs_task_definition" "analytics" {
         }
       }
       healthCheck = {
-        command = ["CMD", "curl", "http://localhost:4000/health"]
-        interval = 5
-        timeout = 5
-        retries = 10
+        command     = ["CMD-SHELL", "curl -sSfL -o /dev/null http://localhost:4000/health"]
+        interval    = 5
+        timeout     = 5
+        retries     = 10
+        startPeriod = 30
       }
     }
   ])
 }
 
 # --- Functions ---
+
+locals {
+  functions_seed = {
+    FUNCTIONS_MAIN_GZ  = base64gzip(file("${path.module}/docker/volumes/functions/main/index.ts"))
+    FUNCTIONS_HELLO_GZ = base64gzip(file("${path.module}/docker/volumes/functions/hello/index.ts"))
+    FUNCTIONS_DENO_GZ  = base64gzip(file("${path.module}/docker/volumes/functions/deno.jsonc"))
+  }
+}
 
 resource "aws_ecs_service" "functions" {
   name            = "functions"
@@ -413,7 +461,7 @@ resource "aws_ecs_task_definition" "functions" {
   container_definitions = jsonencode([
     {
       name      = "functions"
-      image     = "supabase/edge-runtime:v1.71.2"
+      image     = "supabase/edge-runtime:v1.76.2"
       essential = true
       portMappings = [
         {
@@ -421,17 +469,23 @@ resource "aws_ecs_task_definition" "functions" {
           protocol      = "tcp"
         }
       ]
-      environment = [
+      environment = concat([
+        # Legacy symmetric HS256 key
         { name = "JWT_SECRET", value = var.jwt_secret },
-        { name = "SUPABASE_URL", value = "http://kong.supabase.internal:8000" },
+        { name = "SUPABASE_URL", value = local.internal_api_url },
         { name = "SUPABASE_PUBLIC_URL", value = var.supabase_public_url },
+        # Legacy API keys (HS256-signed JWTs)
         { name = "SUPABASE_ANON_KEY", value = var.anon_key },
         { name = "SUPABASE_SERVICE_ROLE_KEY", value = var.service_role_key },
-        { name = "SUPABASE_PUBLISHABLE_KEYS", value = "{\"default\":\"${var.supabase_publishable_key}\"}" },
-        { name = "SUPABASE_SECRET_KEYS", value = "{\"default\":\"${var.supabase_secret_key}\"}" },
+        # New opaque API keys, as JSON maps ({"default":"sb_..."})
+        { name = "SUPABASE_PUBLISHABLE_KEYS", value = jsonencode({ default = var.supabase_publishable_key }) },
+        { name = "SUPABASE_SECRET_KEYS", value = jsonencode({ default = var.supabase_secret_key }) },
         { name = "SUPABASE_DB_URL", value = "postgresql://postgres:${var.postgres_password}@db.supabase.internal:${var.postgres_port}/${var.postgres_db}" },
         { name = "VERIFY_JWT", value = tostring(var.functions_verify_jwt) }
-      ]
+        ],
+        [for k, v in local.functions_seed : { name = k, value = v }],
+        local.jwks_env ? [{ name = "SUPABASE_JWKS", value = var.jwt_jwks }] : []
+      )
       mountPoints = [
         {
           sourceVolume  = "functions-data"
@@ -439,7 +493,20 @@ resource "aws_ecs_task_definition" "functions" {
           readOnly      = false
         }
       ]
-      command = ["start", "--main-service", "/home/deno/functions/main"]
+      # Seed the functions volume, then start the runtime. The main router is
+      # template-owned and refreshed on every start; hello/ and deno.jsonc (the
+      # import map main uses for every function) are only seeded once.
+      entryPoint = ["/bin/sh", "-c"]
+      command = [
+        <<-EOT
+        set -e
+        mkdir -p /home/deno/functions/main /home/deno/functions/hello
+        echo "$FUNCTIONS_MAIN_GZ" | base64 -d | gunzip > /home/deno/functions/main/index.ts
+        [ -e /home/deno/functions/hello/index.ts ] || echo "$FUNCTIONS_HELLO_GZ" | base64 -d | gunzip > /home/deno/functions/hello/index.ts
+        [ -e /home/deno/functions/deno.jsonc ] || echo "$FUNCTIONS_DENO_GZ" | base64 -d | gunzip > /home/deno/functions/deno.jsonc
+        exec edge-runtime start --user-worker-request-idle-timeout 150000 --main-service /home/deno/functions/main
+        EOT
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -447,6 +514,12 @@ resource "aws_ecs_task_definition" "functions" {
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "functions"
         }
+      }
+      healthCheck = {
+        command  = ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/127.0.0.1/9000'"]
+        interval = 5
+        timeout  = 5
+        retries  = 3
       }
     }
   ])
@@ -495,7 +568,7 @@ resource "aws_ecs_task_definition" "supavisor" {
   container_definitions = jsonencode([
     {
       name      = "supavisor"
-      image     = "supabase/supavisor:2.7.4"
+      image     = "supabase/supavisor:2.9.12"
       essential = true
       portMappings = [
         {
@@ -510,6 +583,8 @@ resource "aws_ecs_task_definition" "supavisor" {
       environment = [
         { name = "PORT", value = "4000" },
         { name = "POSTGRES_PORT", value = tostring(var.postgres_port) },
+        # pooler.exs registers the tenant against this host
+        { name = "POSTGRES_HOST", value = "db.supabase.internal" },
         { name = "POSTGRES_DB", value = var.postgres_db },
         { name = "POSTGRES_PASSWORD", value = var.postgres_password },
         { name = "DATABASE_URL", value = "ecto://supabase_admin:${var.postgres_password}@db.supabase.internal:${var.postgres_port}/_supabase" },
@@ -528,9 +603,10 @@ resource "aws_ecs_task_definition" "supavisor" {
         # Inject config
         { name = "POOLER_CONFIG", value = file("${path.module}/docker/volumes/pooler/pooler.exs") }
       ]
+      # $(...) — not compose's $$(...) escape, which would reach the shell as the PID
       command = [
         "/bin/sh", "-c",
-        "mkdir -p /etc/pooler && echo \"$POOLER_CONFIG\" > /etc/pooler/pooler.exs && /app/bin/migrate && /app/bin/supavisor eval \"$$(cat /etc/pooler/pooler.exs)\" && /app/bin/server"
+        "mkdir -p /etc/pooler && echo \"$POOLER_CONFIG\" > /etc/pooler/pooler.exs && /app/bin/migrate && /app/bin/supavisor eval \"$(cat /etc/pooler/pooler.exs)\" && /app/bin/server"
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -541,10 +617,11 @@ resource "aws_ecs_task_definition" "supavisor" {
         }
       }
       healthCheck = {
-        command = ["CMD", "curl", "-sSfL", "--head", "-o", "/dev/null", "http://127.0.0.1:4000/api/health"]
-        interval = 10
-        timeout = 5
-        retries = 5
+        command     = ["CMD", "curl", "-sSfL", "--head", "-o", "/dev/null", "http://127.0.0.1:4000/api/health"]
+        interval    = 10
+        timeout     = 5
+        retries     = 5
+        startPeriod = 30
       }
     }
   ])

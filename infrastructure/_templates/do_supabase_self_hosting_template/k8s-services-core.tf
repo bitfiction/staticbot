@@ -21,7 +21,7 @@ resource "kubernetes_deployment" "auth" {
       spec {
         container {
           name  = "auth"
-          image = "supabase/gotrue:v2.186.0"
+          image = "supabase/gotrue:v2.196.0"
 
           port {
             container_port = 9999
@@ -38,7 +38,7 @@ resource "kubernetes_deployment" "auth" {
           }
           env {
             name  = "API_EXTERNAL_URL"
-            value = var.api_external_url
+            value = local.api_external_url
           }
           env {
             name  = "GOTRUE_DB_DRIVER"
@@ -76,6 +76,7 @@ resource "kubernetes_deployment" "auth" {
             name  = "GOTRUE_JWT_EXP"
             value = tostring(var.jwt_expiry)
           }
+          # Legacy symmetric HS256 key
           env {
             name = "GOTRUE_JWT_SECRET"
             value_from {
@@ -84,6 +85,23 @@ resource "kubernetes_deployment" "auth" {
                 key  = "JWT_SECRET"
               }
             }
+          }
+          # JSON array of signing JWKs (EC private + legacy symmetric)
+          dynamic "env" {
+            for_each = local.jwt_keys_enabled ? [1] : []
+            content {
+              name = "GOTRUE_JWT_KEYS"
+              value_from {
+                secret_key_ref {
+                  name = kubernetes_secret.supabase_config.metadata[0].name
+                  key  = "JWT_KEYS"
+                }
+              }
+            }
+          }
+          env {
+            name  = "GOTRUE_JWT_ISSUER"
+            value = local.api_external_url
           }
           env {
             name  = "GOTRUE_EXTERNAL_EMAIL_ENABLED"
@@ -151,6 +169,16 @@ resource "kubernetes_deployment" "auth" {
             value = tostring(var.enable_phone_autoconfirm)
           }
 
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 9999
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
           liveness_probe {
             http_get {
               path = "/health"
@@ -216,7 +244,7 @@ resource "kubernetes_deployment" "rest" {
       spec {
         container {
           name    = "rest"
-          image   = "postgrest/postgrest:v14.8"
+          image   = "postgrest/postgrest:v14.17"
           command = ["postgrest"]
 
           port {
@@ -245,11 +273,20 @@ resource "kubernetes_deployment" "rest" {
             value = "anon"
           }
           env {
+            name  = "PGRST_ADMIN_SERVER_PORT"
+            value = "3001"
+          }
+          env {
+            name  = "PGRST_ADMIN_SERVER_HOST"
+            value = "localhost"
+          }
+          # Symmetric secret, or the JWKS when asymmetric keys are configured
+          env {
             name = "PGRST_JWT_SECRET"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
-                key  = "JWT_SECRET"
+                key  = "PGRST_JWT_SECRET"
               }
             }
           }
@@ -258,17 +295,30 @@ resource "kubernetes_deployment" "rest" {
             value = "false"
           }
           env {
-            name = "PGRST_APP_SETTINGS_JWT_SECRET"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret.supabase_config.metadata[0].name
-                key  = "JWT_SECRET"
-              }
-            }
-          }
-          env {
             name  = "PGRST_APP_SETTINGS_JWT_EXP"
             value = tostring(var.jwt_expiry)
+          }
+
+          # `postgrest --ready` queries the admin server on localhost:3001
+          readiness_probe {
+            exec {
+              command = ["postgrest", "--ready"]
+            }
+            period_seconds    = 5
+            timeout_seconds   = 5
+            failure_threshold = 3
+          }
+
+          # Not --ready: that fails while the database is down, and restarting
+          # PostgREST doesn't help it reconnect.
+          liveness_probe {
+            tcp_socket {
+              port = 3000
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 3
           }
 
           resources {
@@ -325,7 +375,7 @@ resource "kubernetes_deployment" "realtime" {
       spec {
         container {
           name  = "realtime"
-          image = "supabase/realtime:v2.76.5"
+          image = "supabase/realtime:v2.134.10"
 
           port {
             container_port = 4000
@@ -366,15 +416,34 @@ resource "kubernetes_deployment" "realtime" {
             value = "SET search_path TO _realtime"
           }
           env {
-            name  = "DB_ENC_KEY"
-            value = "supabaserealtime"
+            name = "DB_ENC_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.supabase_config.metadata[0].name
+                key  = "REALTIME_DB_ENC_KEY"
+              }
+            }
           }
+          # Legacy symmetric HS256 key
           env {
             name = "API_JWT_SECRET"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
                 key  = "JWT_SECRET"
+              }
+            }
+          }
+          # JWKS for token verification (EC public + legacy symmetric)
+          dynamic "env" {
+            for_each = local.jwt_jwks_enabled ? [1] : []
+            content {
+              name = "API_JWT_JWKS"
+              value_from {
+                secret_key_ref {
+                  name = kubernetes_secret.supabase_config.metadata[0].name
+                  key  = "JWT_JWKS"
+                }
               }
             }
           }
@@ -498,7 +567,7 @@ resource "kubernetes_deployment" "storage" {
         # Storage API container
         container {
           name  = "storage"
-          image = "supabase/storage-api:v1.48.26"
+          image = "supabase/storage-api:v1.74.0"
 
           port {
             container_port = 5000
@@ -527,12 +596,26 @@ resource "kubernetes_deployment" "storage" {
             name  = "POSTGREST_URL"
             value = "http://rest:3000"
           }
+          # Legacy symmetric HS256 key
           env {
             name = "AUTH_JWT_SECRET"
             value_from {
               secret_key_ref {
                 name = kubernetes_secret.supabase_config.metadata[0].name
                 key  = "JWT_SECRET"
+              }
+            }
+          }
+          # JWKS for token verification (EC public + legacy symmetric)
+          dynamic "env" {
+            for_each = local.jwt_jwks_enabled ? [1] : []
+            content {
+              name = "JWT_JWKS"
+              value_from {
+                secret_key_ref {
+                  name = kubernetes_secret.supabase_config.metadata[0].name
+                  key  = "JWT_JWKS"
+                }
               }
             }
           }
@@ -630,7 +713,7 @@ resource "kubernetes_deployment" "storage" {
         # ImgProxy container (same pod, shares storage PVC)
         container {
           name  = "imgproxy"
-          image = "darthsim/imgproxy:v3.30.1"
+          image = "darthsim/imgproxy:v3.31.4"
 
           port {
             container_port = 5001

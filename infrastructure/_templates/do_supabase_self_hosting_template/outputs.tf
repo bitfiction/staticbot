@@ -3,8 +3,8 @@ output "cluster_endpoint" {
   value       = digitalocean_kubernetes_cluster.main.endpoint
 }
 
-output "kong_url" {
-  description = "URL for Kong (Supabase API Gateway)"
+output "api_url" {
+  description = "Supabase API URL (API gateway)"
   value       = "https://${var.domain_name}"
 }
 

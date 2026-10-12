@@ -3,14 +3,12 @@ output "alb_dns_name" {
   value       = aws_lb.main.dns_name
 }
 
-output "kong_url" {
-  description = "URL for Kong (Supabase API Gateway)"
-  value       = "http://${aws_lb.main.dns_name}:8000"
+output "api_url" {
+  description = "Supabase API URL (API gateway)"
+  value       = "http://${aws_lb.main.dns_name}"
 }
 
 output "studio_url" {
-  description = "URL for Supabase Studio"
-  value       = "http://${aws_lb.main.dns_name}/studio" 
-  # Note: Studio routing in ALB might need adjustment (port 3000 vs /studio path)
-  # In network.tf I added a listener rule for /studio* -> studio:3000
+  description = "Supabase Studio (served by the API gateway behind basic auth)"
+  value       = "http://${aws_lb.main.dns_name}"
 }
