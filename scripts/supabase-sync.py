@@ -112,6 +112,12 @@ IGNORED_VOLUME_PATHS: dict[str, str] = {
     "volumes/db/init": "Legacy dir; data.sql is empty and not mounted by upstream docker-compose.yml",
 }
 
+# Templates whose databases are upgraded in place by a migrate job
+# (k8s/db-lifecycle): image migrations a newer Postgres image adds need an
+# apply/skip decision there, and changed upstream init SQL needs a template
+# migration, because existing databases never re-run first-boot SQL.
+DB_LIFECYCLE_TEMPLATES = ["mt_tenant"]
+
 # Upstream files whose changes always need a human to port them into Terraform.
 REVIEW_FILES = [
     "docker-compose.yml",
@@ -439,6 +445,46 @@ def detect_review_files(since: str | None) -> list[dict]:
     return changed
 
 
+def image_migrations(image: str) -> list[str] | None:
+    """List an image's built-in migrations (needs Docker; None if unavailable)."""
+    if shutil.which("docker") is None:
+        return None
+    result = subprocess.run(
+        ["docker", "run", "--rm", "--entrypoint", "ls", image, "/docker-entrypoint-initdb.d/migrations"],
+        capture_output=True, text=True,
+    )
+    return result.stdout.split() if result.returncode == 0 else None
+
+
+def decided_image_migrations(tmpl: dict) -> set[str]:
+    path = tmpl["base"] / "k8s" / "db-lifecycle" / "image-migrations.txt"
+    if not path.exists():
+        return set()
+    return {line.split()[0] for line in path.read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")}
+
+
+def detect_db_lifecycle(image_changes: list[dict], volume_diffs: list[dict]) -> list[dict]:
+    """What existing databases need by hand: image-migration decisions and template migrations."""
+    items = []
+    for tmpl_key in DB_LIFECYCLE_TEMPLATES:
+        tmpl = TEMPLATES[tmpl_key]
+        for ch in image_changes:
+            if ch["template"] != tmpl_key or ch["service"] != "db":
+                continue
+            old, new = image_migrations(ch["current"]), image_migrations(ch["upstream"])
+            if old is None or new is None:
+                items.append({"template_label": tmpl["label"], "kind": "decide", "image": ch["upstream"],
+                              "files": None, "hint": f"docker run --rm --entrypoint ls {ch['upstream']} /docker-entrypoint-initdb.d/migrations"})
+                continue
+            undecided = sorted(set(new) - set(old) - decided_image_migrations(tmpl))
+            if undecided:
+                items.append({"template_label": tmpl["label"], "kind": "decide", "image": ch["upstream"], "files": undecided})
+        changed_sql = sorted({d["rel_path"] for d in volume_diffs if d["template"] == tmpl_key and d["rel_path"].startswith("volumes/db/")})
+        if changed_sql:
+            items.append({"template_label": tmpl["label"], "kind": "template_migration", "files": changed_sql})
+    return items
+
+
 def run_detect(as_json: bool = False):
     """Run full detection and print report."""
     last = get_last_sync()
@@ -449,6 +495,7 @@ def run_detect(as_json: bool = False):
     volume_diffs, ignored_diffs = detect_volume_diffs(since)
     env_changes = detect_env_changes(since)
     review_files = detect_review_files(since)
+    db_lifecycle = detect_db_lifecycle(image_changes, volume_diffs)
 
     if as_json:
         print(json.dumps({
@@ -461,6 +508,7 @@ def run_detect(as_json: bool = False):
             "ignored_volume_diffs": ignored_diffs,
             "env_changes": env_changes,
             "review_files": review_files,
+            "db_lifecycle": db_lifecycle,
         }, indent=2))
         return
 
@@ -535,6 +583,21 @@ def run_detect(as_json: bool = False):
                     print("    (no upstream history found for this file)")
         print()
 
+    if db_lifecycle:
+        print("TIER 3 (review-required) — existing tenant databases (k8s/db-lifecycle):")
+        for item in db_lifecycle:
+            if item["kind"] == "decide":
+                print(f"  {item['template_label']}: {item['image']} adds image migrations; add 'apply' or 'skip <reason>'")
+                print("    to k8s/db-lifecycle/image-migrations.txt, or the migrate job fails:")
+                for f in item["files"] or [f"(Docker unavailable; list them with: {item['hint']})"]:
+                    print(f"      {f}")
+            else:
+                print(f"  {item['template_label']}: upstream init SQL changed; existing databases only get it through a")
+                print("    template migration in k8s/db-lifecycle/migrations/:")
+                for f in item["files"]:
+                    print(f"      {f}")
+        print()
+
     if ignored_diffs:
         # Collapse to unique paths so each reason prints once.
         unique: dict[str, dict] = {}
@@ -552,7 +615,7 @@ def run_detect(as_json: bool = False):
             print(f"  {'+' if added else '-'} {var}")
         print()
 
-    if not (tier1 or image_problems or review_files or volume_diffs or env_changes):
+    if not (tier1 or image_problems or review_files or volume_diffs or env_changes or db_lifecycle):
         print("Everything is in sync with upstream.")
 
 

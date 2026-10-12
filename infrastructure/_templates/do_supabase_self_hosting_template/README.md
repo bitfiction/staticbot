@@ -134,6 +134,8 @@ python scripts/supabase-sync.py detect
 
 # 3. Port the TIER 2-4 items detect lists (env vars, compose changes, Envoy
 #    config, SQL) into the Terraform by hand — detect prints the commits.
+#    For tenant databases that includes image-migration decisions and template
+#    migrations (do_supabase_multi_tenant_template/k8s/db-lifecycle/README.md).
 
 # 4. Apply image bumps and refresh every template's docker/ copy
 python scripts/supabase-sync.py apply --safe

@@ -8,7 +8,7 @@ Each tenant gets its **own Postgres**. Roles, passwords, extensions, pg_net, pg_
 
 | Service | Image | Resources (req → limit) |
 |---------|-------|-------------------------|
-| PostgreSQL | supabase/postgres:17.6.1.136 (or 15.8.1.085) | 100m/256Mi → 1/1Gi, PVC `db_storage_size` |
+| PostgreSQL | supabase/postgres:17.6.1.136 (+ backup sidecar: continuous WAL archive, daily base backups) | 100m/256Mi → 1/1Gi, PVC `db_storage_size` |
 | API gateway (Envoy) | envoyproxy/envoy:v1.39.1 | 20m/64Mi → 300m/256Mi |
 | Auth (GoTrue) | supabase/gotrue:v2.196.0 | 30m/64Mi → 200m/256Mi |
 | PostgREST | postgrest/postgrest:v14.17 | 30m/64Mi → 200m/256Mi |
@@ -18,7 +18,10 @@ Each tenant gets its **own Postgres**. Roles, passwords, extensions, pg_net, pg_
 
 Shared (from the shared module, `supabase-shared` namespace): Realtime, Supavisor, ImgProxy, Analytics/Vector and the tenant router.
 
-Plus one job (`wait_for_completion = true`): **service registration** upserts the tenant into the shared Realtime and Supavisor through their management APIs (`k8s/register-tenant.py`). It authenticates with an admin JWT signed by `shared_api_jwt_secret` and fails the apply on error. The job name carries a hash of what it registers, so a changed password or JWT secret re-registers the tenant.
+Plus two jobs (`wait_for_completion = true`):
+
+- **Database migrations** (`migrate-db-<hash>`): brings an existing tenant database up to the current template after a Postgres image bump or a new template migration; a no-op on fresh tenants. See `k8s/db-lifecycle/README.md`.
+- **Service registration** upserts the tenant into the shared Realtime and Supavisor through their management APIs (`k8s/register-tenant.py`). It authenticates with an admin JWT signed by `shared_api_jwt_secret` and fails the apply on error. The job name carries a hash of what it registers, so a changed password or JWT secret re-registers the tenant.
 
 ## Request Flow
 
@@ -53,8 +56,9 @@ The shared cluster must be deployed first via `staticbot-control-center/infra/di
 | `postgres_password` | Generated per tenant | Tenant Postgres (postgres, supabase_admin, service roles) |
 | `jwt_secret`, `anon_key`, `service_role_key` | Generated per tenant (or preserved from the source project) | Legacy HS256 keys |
 | `supabase_publishable_key`, `supabase_secret_key`, `anon_key_asymmetric`, `service_role_key_asymmetric`, `jwt_keys`, `jwt_jwks` | Generated per tenant (`docker/utils/add-new-auth-keys.sh`) | New API keys (optional) |
-| `postgres_version` | `"17"` (default) | `"15"` only for a dump that won't load into 17 |
 | `spaces_*` | Shared Spaces bucket | Storage backend |
+| `wal_g_image`, `image_pull_secret_name` | Control-center `docker/wal-g` image; pull secret = registry name (DOCR integration) | WAL-G for backups |
+| `backup_s3_*`, `backup_interval_hours`, `backup_retain_full` | Shared backup bucket | WAL archive + base backups under `tenants/{id}/` |
 
 ## Files
 
@@ -63,7 +67,8 @@ The shared cluster must be deployed first via `staticbot-control-center/infra/di
 | `main.tf` | Provider (standalone — tf-runner runs this directly) and locals |
 | `variables.tf` | Tenant config + shared infra references |
 | `k8s-namespace.tf` | `tenant-{id}` namespace, Secret, ConfigMaps (init SQL, Envoy, functions), PVCs, NetworkPolicy |
-| `k8s-db.tf` | Tenant Postgres (init scripts, persisted `/etc/postgresql-custom`) |
+| `k8s-db.tf` | Tenant Postgres (init scripts, persisted `/etc/postgresql-custom`, baseline hook, Postgres major check) and the migrate Job |
+| `k8s/db-lifecycle/` | Schema baseline + migrations, backup sidecar, point-in-time restore (see its README) |
 | `k8s-services.tf` | Auth, PostgREST, Storage API, Meta, Edge Functions, Envoy |
 | `k8s-provisioning.tf` | Realtime + Supavisor registration job |
 | `k8s/register-tenant.py` | Registration script (template-owned, not synced) |

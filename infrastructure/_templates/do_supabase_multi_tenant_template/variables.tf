@@ -50,17 +50,6 @@ variable "api_domain" {
 
 # --- Database (tenant-owned Postgres) ---
 
-variable "postgres_version" {
-  description = "Postgres major version. 17 is the upstream default and what Supabase Cloud projects run; 15 only for restoring a PG15 dump that won't load into 17."
-  type        = string
-  default     = "17"
-
-  validation {
-    condition     = contains(["15", "17"], var.postgres_version)
-    error_message = "postgres_version must be \"15\" or \"17\"."
-  }
-}
-
 variable "postgres_password" {
   description = "Password of this tenant's Postgres (postgres, supabase_admin and the service roles). Unique per tenant."
   type        = string
@@ -338,4 +327,59 @@ variable "pooler_max_client_conn" {
   description = "Maximum Supavisor client connections for this tenant"
   type        = number
   default     = 100
+}
+
+# --- Backups (WAL-G, like Staticbot's own database) ---
+# Continuous WAL archiving plus a base backup every backup_interval_hours, to
+# s3://{backup_s3_bucket}/tenants/{tenant_id}. See k8s/db-lifecycle/README.md.
+
+variable "wal_g_image" {
+  description = "Image carrying a static /wal-g (staticbot-control-center docker/wal-g), e.g. registry.digitalocean.com/staticbot-prod/wal-g:v3.0.9"
+  type        = string
+}
+
+variable "image_pull_secret_name" {
+  description = "Pull secret for wal_g_image in the tenant namespace. With DOCR registry integration on the cluster, DO injects one named after the registry (e.g. staticbot-prod) into every namespace. Empty for a public image."
+  type        = string
+  default     = ""
+}
+
+variable "backup_s3_bucket" {
+  description = "Bucket holding all tenants' WAL-G archives (each under tenants/{tenant_id})"
+  type        = string
+}
+
+variable "backup_s3_region" {
+  description = "Region of the backup bucket"
+  type        = string
+}
+
+variable "backup_s3_endpoint" {
+  description = "S3 endpoint for a non-AWS store (e.g. https://fra1.digitaloceanspaces.com). Empty for AWS S3."
+  type        = string
+  default     = ""
+}
+
+variable "backup_s3_access_key_id" {
+  description = "Access key with read/write/list on the backup bucket"
+  type        = string
+  sensitive   = true
+}
+
+variable "backup_s3_secret_access_key" {
+  description = "Secret for backup_s3_access_key_id"
+  type        = string
+  sensitive   = true
+}
+
+variable "backup_interval_hours" {
+  description = "Hours between base backups (WAL is archived continuously in between)"
+  type        = number
+  default     = 24
+}
+
+variable "backup_retain_full" {
+  description = "Base backups to keep; older ones and their WAL are deleted"
+  type        = number
+  default     = 14
 }

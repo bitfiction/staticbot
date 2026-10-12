@@ -26,13 +26,11 @@ provider "kubernetes" {
 locals {
   tenant_namespace = "tenant-${var.tenant_id}"
 
-  # One image per supported Postgres major. A PG15 data directory can't be
-  # opened by PG17: upgrade in place with docker/utils/upgrade-pg17.sh first.
-  postgres_images = {
-    "15" = "supabase/postgres:15.8.1.085"
-    "17" = "supabase/postgres:17.6.1.136"
-  }
-  postgres_image = local.postgres_images[var.postgres_version]
+  # Tenants start on Postgres 17. supabase-sync.py bumps this within the 17
+  # track only; a new major needs an upgrade path (pg_upgrade) first, which the
+  # check-postgres-major init container enforces.
+  postgres_image = "supabase/postgres:17.6.1.136"
+  postgres_major = split(".", split(":", local.postgres_image)[1])[0]
 
   # The tenant's own Postgres, reachable in-namespace as `db`
   db_host     = "db"
@@ -55,6 +53,24 @@ locals {
   realtime_host  = "realtime.${var.shared_namespace}.svc.cluster.local"
   supavisor_host = "supavisor.${var.shared_namespace}.svc.cluster.local"
   imgproxy_host  = "imgproxy.${var.shared_namespace}.svc.cluster.local"
+
+  # WAL-G settings shared by the db container (archive_command) and the backup
+  # sidecar. Secrets come from the tenant Secret, see local.walg_secret_env.
+  walg_env = merge(
+    {
+      WALG_S3_PREFIX          = "s3://${var.backup_s3_bucket}/tenants/${var.tenant_id}"
+      AWS_REGION              = var.backup_s3_region
+      WALG_COMPRESSION_METHOD = "lz4"
+    },
+    var.backup_s3_endpoint == "" ? {} : {
+      AWS_ENDPOINT            = var.backup_s3_endpoint
+      AWS_S3_FORCE_PATH_STYLE = "true"
+    }
+  )
+  walg_secret_env = {
+    AWS_ACCESS_KEY_ID     = "BACKUP_S3_ACCESS_KEY_ID"
+    AWS_SECRET_ACCESS_KEY = "BACKUP_S3_SECRET_ACCESS_KEY"
+  }
 
   # Asymmetric JWT support is opt-in, like upstream's commented-out JWT_KEYS/JWT_JWKS.
   jwt_keys_enabled = nonsensitive(var.jwt_keys != "")
