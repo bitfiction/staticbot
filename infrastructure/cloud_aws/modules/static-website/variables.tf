@@ -95,6 +95,21 @@ variable "redirects" {
   default = []
 }
 
+# Base44 function URLs on the site's own domain: "/functions/<path>" is proxied to the customer's
+# Supabase project at "<supabase_functions_url>/<path>". Set by staticbot-app ONLY for apps migrated
+# from Base44, whose API clients, webhooks and docs use "https://<site>/functions/<name>"; empty for
+# every other site. See functions-proxy.tf, including what it changes about SPA fallback.
+variable "supabase_functions_url" {
+  description = "Supabase Edge Functions base (https://<ref>.supabase.co/functions/v1) served at /functions/*. Empty disables the route entirely."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.supabase_functions_url == "" || can(regex("^https://[^/]+/functions/v1$", var.supabase_functions_url))
+    error_message = "supabase_functions_url must be empty or https://<host>/functions/v1 (no trailing slash)."
+  }
+}
+
 # Public base URL of the customer's own Supabase bucket holding migrated builder media, e.g.
 # "https://<ref>.supabase.co/storage/v1/object/public/builder-assets/lovable". Set by
 # staticbot-app from the website template's VITE_SUPABASE_URL; empty for every site that never came

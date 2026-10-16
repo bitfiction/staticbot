@@ -35,6 +35,7 @@ variable "websites" {
     # optional on purpose: the tfvars processor DROPS the line when staticbot-app sends an empty
     # value, so a site with no builder media never sees this key at all.
     builder_asset_base_url          = optional(string, "")
+    supabase_functions_url          = optional(string, "")
     redirects                       = optional(list(object({
       from   = string
       to     = string

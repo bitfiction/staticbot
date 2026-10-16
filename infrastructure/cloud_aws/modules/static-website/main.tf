@@ -138,6 +138,44 @@ resource "aws_cloudfront_distribution" "website" {
     }
   }
 
+  # Base44 function URLs → the customer's Supabase Edge Functions. See functions-proxy.tf.
+  dynamic "origin" {
+    for_each = local.functions_proxy_enabled ? [1] : []
+    content {
+      domain_name = local.functions_host
+      origin_id   = "supabase-functions"
+      origin_path = local.functions_origin_path
+
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "https-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+        # Edge functions (an LLM API among them) can take far longer than the 30s default.
+        origin_read_timeout    = 60
+      }
+    }
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = local.functions_proxy_enabled ? [1] : []
+    content {
+      path_pattern             = "/functions/*"
+      target_origin_id         = "supabase-functions"
+      viewer_protocol_policy   = "redirect-to-https"
+      allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+      cached_methods           = ["GET", "HEAD"]
+      compress                 = false
+      cache_policy_id          = local.managed_cache_policy_caching_disabled
+      origin_request_policy_id = local.managed_origin_request_policy_all_viewer_no_host
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.functions_proxy[0].arn
+      }
+    }
+  }
+
   # Default cache behavior
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
@@ -166,8 +204,10 @@ resource "aws_cloudfront_distribution" "website" {
   }
 
   # Custom error responses
+  # None when the functions proxy is on: these are distribution-wide and would replace API error
+  # responses with the SPA shell. The viewer-request function serves the shell instead.
   dynamic "custom_error_response" {
-    for_each = var.error_response_codes
+    for_each = local.functions_proxy_enabled ? {} : var.error_response_codes
     content {
       error_code            = custom_error_response.key
       response_code         = custom_error_response.value.response_code

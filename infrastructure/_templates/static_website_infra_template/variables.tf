@@ -30,6 +30,7 @@ variable "websites" {
       maintenance_allowed_ips = list(string)
       # See the subdomain template's copy: optional so an empty value can be dropped outright.
       builder_asset_base_url  = optional(string, "")
+      supabase_functions_url  = optional(string, "")
       redirects               = optional(list(object({
         from   = string
         to     = string

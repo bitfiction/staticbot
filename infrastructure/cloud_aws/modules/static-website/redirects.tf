@@ -143,6 +143,16 @@ function handler(event) {
     var lastSegment = uri.split('/').pop();
     var hasExtension = lastSegment.includes('.');
 
+    // SPA shell served here instead of by custom_error_response, which is off when the site proxies
+    // "/functions/*" (functions-proxy.tf). Same rule as the shared preview distribution's router.
+    var spaShellInFunction = ${local.functions_proxy_enabled};
+    if (spaShellInFunction) {
+        if (!hasExtension) {
+            request.uri = '/index.html';
+        }
+        return request;
+    }
+
     if (!hasExtension) {
         if (uri.endsWith('/') && uri.length > 1) {
             // /about/ → /about/index.html  (Next.js trailingSlash: true)

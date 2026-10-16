@@ -16,6 +16,7 @@ locals {
           maintenance_allowed_ips = try(stage.maintenance_allowed_ips, [])
           redirects               = try(stage.redirects, [])
           builder_asset_base_url  = try(stage.builder_asset_base_url, "")
+          supabase_functions_url  = try(stage.supabase_functions_url, "")
           full_domain             = "${stage.subdomain}.${website.domain_name}"
           content_path            = coalesce(stage.content_path, "${path.module}/../../../../websites/${website.domain_name}/${stage.subdomain}") // fallback only for manual deployments
         }
@@ -30,6 +31,7 @@ locals {
           maintenance_allowed_ips = try(website.maintenance_allowed_ips, [])
           redirects               = try(website.redirects, [])
           builder_asset_base_url  = try(website.builder_asset_base_url, "")
+          supabase_functions_url  = try(website.supabase_functions_url, "")
           full_domain             = "${website.subdomain}.${website.domain_name}"
           content_path            = website.content_path
         }

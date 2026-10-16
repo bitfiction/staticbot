@@ -26,6 +26,7 @@ websites = {
     maintenance_allowed_ips = []
     redirects               = <redirects>
     builder_asset_base_url  = "<builder_asset_base_url>"
+    supabase_functions_url  = "<supabase_functions_url>"
   }
 }
 
