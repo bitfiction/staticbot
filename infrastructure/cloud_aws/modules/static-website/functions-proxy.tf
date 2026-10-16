@@ -65,6 +65,24 @@ function handler(event) {
     var uri = request.uri;
     var prefix = '/functions/';
 
+    // Same maintenance gate and allow-list as the site's viewer_request (redirects.tf), answered the
+    // way an API caller understands: 503 JSON, not a redirect to maintenance.html. Without it a site in
+    // maintenance kept executing customer functions (code review 2026-10-16).
+    var maintenanceMode = ${var.maintenance_mode};
+    var allowedIPs = ${jsonencode(var.maintenance_allowed_ips)};
+    if (maintenanceMode && !allowedIPs.includes(event.viewer && event.viewer.ip)) {
+        return {
+            statusCode: 503,
+            statusDescription: 'Service Unavailable',
+            headers: {
+                'content-type': { value: 'application/json' },
+                'retry-after': { value: '300' },
+                'cache-control': { value: 'no-store' }
+            },
+            body: '{"error":"Down for maintenance"}'
+        };
+    }
+
     if (uri.indexOf(prefix) !== 0) {
         return notFound();
     }

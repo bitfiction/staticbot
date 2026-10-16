@@ -90,7 +90,7 @@ function handler(event) {
     var maintenancePath = '/maintenance.html';
 
     if (maintenanceMode && uri !== maintenancePath) {
-        if (!allowedIPs.includes(request.clientIp)) {
+        if (!allowedIPs.includes(event.viewer && event.viewer.ip)) {
             return {
                 statusCode: 302,
                 statusDescription: 'Found',
