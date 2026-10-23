@@ -28,8 +28,11 @@
 # app shell. That is the honest answer, and it is what the preview distribution already does.
 #
 # Not cached, all methods, all viewer headers except Host (CloudFront sends the origin's own Host,
-# which Supabase's gateway requires). Unverified until planned on a real distribution: that the
-# managed AllViewerExceptHostHeader policy forwards Authorization (API keys, Supabase JWTs).
+# which Supabase's gateway requires). Verified on a live distribution (2026-10-17): the managed
+# AllViewerExceptHostHeader policy forwards Authorization and x-api-key on both GET and POST. A
+# function that checks API keys answered every request with and without a key exactly as it does when
+# called on Supabase directly. Not yet exercised: a successful call with a valid key, and streamed
+# (SSE) responses.
 
 locals {
   functions_proxy_enabled = var.supabase_functions_url != ""
