@@ -47,6 +47,27 @@ Stack edit UI (RedirectsEditor.vue, Netlify _redirects format)
 - **Force flag** (Netlify's `!`, redirect even when destination exists): not applicable here — every redirect is exact-match against the request URI before any S3 lookup, so destination existence is irrelevant.
 - **Per-status defaults**: edit the `statusDescription` mapping in the heredoc.
 
+## www redirect keeps the query string
+
+The apex → `www.` 301 appends `queryString(request.querystring)`. Before 2026-11-19 it built
+`'https://www.' + domain + uri` and dropped the query. UTM parameters and shared deep links were lost,
+and so was a PKCE `?code=` whenever a Supabase `site_url` or `redirect_to` pointed at the apex.
+
+- **CloudFront passes names and values through raw, still percent-encoded.** AWS's docs don't say so.
+  It was measured on a probe distribution: `x%2Fy`, `foo+bar`, `100%25` and `a%26b` all arrive unchanged.
+  So they are joined back as they are. Do **not** run them through `encodeURIComponent` or the runtime's
+  `querystring.stringify`: that turns `%2F` into `%252F`. `event.request.uri` is raw too (`/a%20b/%C3%A9`).
+- Only runs of characters a header can't carry (a raw space or non-ASCII character, which non-browser
+  clients can send) are percent-encoded. A value `encodeURIComponent` rejects (a lone surrogate)
+  redirects without the query rather than failing the request.
+- Order across names is not kept (the event is an object), while repeated names keep theirs (`multiValue`).
+  A bare `?flag` arrives as `{value: ""}` and comes back as `flag=`.
+- Maintenance and per-stack redirects still drop the query. Maintenance does so on purpose; a per-stack
+  `to` is the operator's literal target.
+- Tests: `node --test infrastructure/cloud_aws/modules/static-website/redirects.test.mjs` (events use
+  the measured shape).
+- Takes effect on each site's next deploy (`create_before_destroy` swaps the function in place).
+
 ## Pitfalls
 - Adding a new variable used inside the heredoc requires it to be declared in `variables.tf` AND plumbed through the root module (`root_modules/static_website_custom_domain/{variables,locals,main}.tf`) AND both per-template wrappers (`_templates/static_website_infra_template/` + `_templates/static_website_on_subdomain_infra_template/`). Missing any layer makes the value silently default to the heredoc's hardcoded fallback.
 - The Python tf-runner does literal string substitution on the tfvars file. The substituted value MUST be valid HCL (uses `=`), not JSON syntax. The Java backend pre-formats it via `RedirectsParser.toHclList`.

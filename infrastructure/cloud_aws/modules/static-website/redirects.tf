@@ -131,7 +131,7 @@ function handler(event) {
                 statusCode: 301,
                 statusDescription: 'Moved Permanently',
                 headers: {
-                    'location': { value: 'https://www.' + domain + uri },
+                    'location': { value: 'https://www.' + domain + uri + queryString(request.querystring) },
                     'cache-control': { value: 'max-age=3600' }
                 }
             };
@@ -164,6 +164,33 @@ function handler(event) {
     }
 
     return request;
+}
+
+// "?a=1&b=2" rebuilt from request.querystring, or '' when there is none. The www redirect used to
+// drop the query, which lost UTM parameters, shared deep links and a PKCE "?code=" on the apex.
+// CloudFront hands names and values over exactly as the viewer sent them, still percent-encoded
+// (checked 2026-11-19 on a probe distribution: "x%2Fy" stays "x%2Fy", "foo+bar" stays "foo+bar"),
+// so they are joined back unchanged. Re-encoding them would turn "%2F" into "%252F". Only runs of
+// characters a Location header cannot carry are encoded: a raw space or non-ASCII character, which
+// browsers never send but other clients can. Order across names is not kept (the event is an
+// object); repeated names keep theirs (multiValue). A bare "?flag" comes back as "flag=".
+function queryString(qs) {
+    try {
+        var parts = [];
+        for (var name in qs) {
+            var values = qs[name].multiValue || [qs[name]];
+            for (var i = 0; i < values.length; i++) {
+                parts.push(headerSafe(name) + '=' + headerSafe(values[i].value));
+            }
+        }
+        return parts.length ? '?' + parts.join('&') : '';
+    } catch (e) {
+        return ''; // e.g. a lone surrogate encodeURIComponent rejects: redirect without the query
+    }
+}
+
+function headerSafe(s) {
+    return s.replace(/[^\x21-\x7e]+/g, function (run) { return encodeURIComponent(run); });
 }
 EOF
 }
